@@ -77,10 +77,23 @@
   color: #dcfce7; background: #14532d; border-radius: 4px; padding: 0 .3rem; margin-bottom: .3rem;
 }
 
-.bd-ports { display: flex; justify-content: space-between; gap: 1.2rem; }
-.bd-col { display: flex; flex-direction: column; gap: 0.28rem; }
-.bd-col-out { text-align: right; }
-.bd-port { position: relative; font-size: 11px; color: var(--bd-dim); white-space: nowrap; }
+/* Port rows stack, and each spans the FULL node width via negative margins that cancel the
+   card padding. That is what puts a React Flow handle on the node's edge: the handle is
+   absolutely positioned against this row, so the row's box has to be the node's box. Setting
+   `top` on the handle instead is what made edges terminate off the card. */
+.bd-ports { display: flex; flex-direction: column; gap: 1px; margin-top: 0.15rem; }
+.bd-port {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 17px;
+  margin: 0 -0.55rem;
+  padding: 0 0.55rem;
+  font-size: 11px;
+  color: var(--bd-dim);
+  white-space: nowrap;
+}
+.bd-port-out { justify-content: flex-end; }
 
 /* ── containers ────────────────────────────────────────────────────────────── */
 

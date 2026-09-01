@@ -13,6 +13,11 @@ import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import { innerHandleId, type BoundaryPort } from "@benjidirector/graph-core";
 import { PORT_COLOR, type AssetData, type BeatData, type DirectorPortType, type SceneData } from "./model.js";
 
+// Handle styling ONLY — never position. React Flow positions a handle against its nearest
+// positioned ancestor, so a hand-written `top` here anchors to the port ROW rather than the
+// node and marches straight out of the card, taking the edge endpoint with it. Each row is
+// full-bleed and `position: relative`, which lets React Flow's own left/right rules land the
+// handle on the node edge, vertically centred on its label, at any row count.
 const dot = (type: DirectorPortType) => ({
   background: PORT_COLOR[type] ?? "#9ca3af",
   width: 9,
@@ -29,32 +34,18 @@ export function SceneNode({ data, selected }: NodeProps) {
       <div className="bd-node-title">{d.heading}</div>
       {d.videoPath ? <div className="bd-badge">rendered</div> : null}
       <div className="bd-ports">
-        <div className="bd-col">
-          {ins.map((p, i) => (
-            <div className="bd-port" key={p.id}>
-              <Handle
-                type="target"
-                position={Position.Left}
-                id={p.id}
-                style={{ ...dot(p.type as DirectorPortType), top: 34 + i * 20 }}
-              />
-              <span>{p.label}</span>
-            </div>
-          ))}
-        </div>
-        <div className="bd-col bd-col-out">
-          {outs.map((p, i) => (
-            <div className="bd-port bd-port-out" key={p.id}>
-              <span>{p.label}</span>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={p.id}
-                style={{ ...dot(p.type as DirectorPortType), top: 34 + i * 20 }}
-              />
-            </div>
-          ))}
-        </div>
+        {ins.map((p) => (
+          <div className="bd-port" key={p.id}>
+            <Handle type="target" position={Position.Left} id={p.id} style={dot(p.type as DirectorPortType)} />
+            <span>{p.label}</span>
+          </div>
+        ))}
+        {outs.map((p) => (
+          <div className="bd-port bd-port-out" key={p.id}>
+            <span>{p.label}</span>
+            <Handle type="source" position={Position.Right} id={p.id} style={dot(p.type as DirectorPortType)} />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -71,14 +62,11 @@ export function AssetNode({ data, selected }: NodeProps) {
         {d.label}
       </div>
       {out ? (
-        <div className="bd-port bd-port-out">
-          <span>{out.label}</span>
-          <Handle
-            type="source"
-            position={Position.Right}
-            id={out.id}
-            style={{ ...dot(out.type as DirectorPortType), top: 26 }}
-          />
+        <div className="bd-ports">
+          <div className="bd-port bd-port-out">
+            <span>{out.label}</span>
+            <Handle type="source" position={Position.Right} id={out.id} style={dot(out.type as DirectorPortType)} />
+          </div>
         </div>
       ) : null}
     </div>
