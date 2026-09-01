@@ -171,6 +171,19 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
   const [status, setStatus] = useState<ReachabilityState | null>(null);
   const [note, setNote] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number; flow: { x: number; y: number } } | null>(null);
+
+  /**
+   * Undo.
+   *
+   * Non-negotiable here in a way it is not in an ordinary editor: the AGENT edits this graph
+   * too, so the user needs a way back from a change they did not make and may not have been
+   * watching. Snapshots are taken in `settle`, which every structural change already funnels
+   * through, so nothing can mutate the graph without becoming undoable.
+   */
+  const history = useRef<{ nodes: RFNode[]; edges: Edge[] }[]>([]);
+  const future = useRef<{ nodes: RFNode[]; edges: Edge[] }[]>([]);
+  const restoring = useRef(false);
+  const HISTORY_MAX = 60;
   const { screenToFlowPosition } = useReactFlow();
 
   /**
@@ -221,6 +234,9 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
   /** Bring the graph back to a consistent state. Order is not interchangeable. */
   const settle = useCallback(
     (ns: RFNode[], es: Edge[], opts: { reparent?: boolean } = {}) => {
+      // NOTE: settle receives the arrays a caller has ALREADY mutated, so it is the wrong
+      // place to snapshot — doing it here recorded the post-change state and made every undo
+      // a no-op. History is pushed by `pushHistory`, from the current state, before a change.
       let core = asCore(ns);
       if (opts.reparent !== false) core = core.map((n) => containmentFor(n, core));
       core = sortParentsFirst(core);
@@ -238,20 +254,96 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
     [setEdges, setNodes],
   );
 
+  const pushHistory = useCallback((ns: RFNode[], es: Edge[]) => {
+    if (restoring.current) return;
+    history.current.push({ nodes: ns, edges: es });
+    if (history.current.length > HISTORY_MAX) history.current.shift();
+    future.current = [];
+  }, []);
+
+  const undo = useCallback(() => {
+    const prev = history.current.pop();
+    if (!prev) return setNote("nothing to undo");
+    restoring.current = true;
+    withCurrentRef.current?.((ns, es) => {
+      future.current.push({ nodes: ns, edges: es });
+      const done = decorate(prev.nodes, prev.edges);
+      setNodes(done.nodes);
+      setEdges(done.edges);
+      restoring.current = false;
+      setNote("undo");
+    }, { history: false });
+    return undefined;
+  }, [setEdges, setNodes]);
+
+  const redo = useCallback(() => {
+    const next = future.current.pop();
+    if (!next) return setNote("nothing to redo");
+    restoring.current = true;
+    withCurrentRef.current?.((ns, es) => {
+      history.current.push({ nodes: ns, edges: es });
+      const done = decorate(next.nodes, next.edges);
+      setNodes(done.nodes);
+      setEdges(done.edges);
+      restoring.current = false;
+      setNote("redo");
+    }, { history: false });
+    return undefined;
+  }, [setEdges, setNodes]);
+
   const withCurrent = useCallback(
-    (fn: (ns: RFNode[], es: Edge[]) => void) => {
+    (fn: (ns: RFNode[], es: Edge[]) => void, opts: { history?: boolean } = {}) => {
       setNodes((ns) => {
         setEdges((es) => {
-          queueMicrotask(() => fn(ns as RFNode[], es));
+          queueMicrotask(() => {
+            if (opts.history !== false) pushHistory(ns as RFNode[], es);
+            fn(ns as RFNode[], es);
+          });
           return es;
         });
         return ns;
       });
     },
-    [setEdges, setNodes],
+    [pushHistory, setEdges, setNodes],
   );
 
-  const onNodeDragStop = useCallback(() => withCurrent((ns, es) => settle(ns, es)), [settle, withCurrent]);
+  const withCurrentRef = useRef<typeof withCurrent | null>(null);
+  withCurrentRef.current = withCurrent;
+
+  // Ctrl/Cmd+Z and Ctrl+Shift+Z, scoped to the pane so they never steal ComfyUI's own undo
+  // while the user is working on the canvas behind us.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
+      const root = canvasRef.current?.closest(".bd-root");
+      if (!root || !root.contains(document.activeElement) && !root.matches(":hover")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [redo, undo]);
+
+  /**
+   * Repair: treat the EDGES as the source of truth and re-derive every boundary from them.
+   *
+   * ifr-node-lab's answer to a graph that has drifted — an input that refuses a cable as
+   * already-wired while showing no wire. Reconcile already rebuilds a boundary from crossings;
+   * repair simply runs it over every container at once, which is the whole fix.
+   */
+  const repair = useCallback(() => {
+    withCurrent((ns, es) => {
+      settle(ns, es, { reparent: true });
+      setNote("repaired — boundaries re-derived from the wires");
+    });
+  }, [settle, withCurrent]);
+
+  const onNodeDragStop = useCallback(
+    () => withCurrent((ns, es) => settle(ns, es), { history: false }),
+    [settle, withCurrent],
+  );
 
   /**
    * Connect.
@@ -500,6 +592,7 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
     const target = selectedContainer();
     if (!target) return setNote("select a Beat first");
     if (target.type === SUBGRAPH_TYPE) return setNote(`${target.data.label} is already promoted`);
+    pushHistory(nodes as RFNode[], edges);
     const out = promoteToSubgraph(target.id, asCore(nodes as RFNode[]), asCoreEdges(edges), directorHost);
     const done = decorate(asRF(sortParentsFirst(out.nodes)), asRFEdges(out.edges));
     setNodes(done.nodes);
@@ -507,19 +600,20 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
     const r = out.nodes.find((n) => n.id === target.id)?.data as BeatData;
     setNote(`promoted ${target.data.label} — ${r.promotedIn.length} in, ${r.promotedOut.length} out`);
     return undefined;
-  }, [edges, nodes, selectedContainer, setEdges, setNodes]);
+  }, [edges, nodes, pushHistory, selectedContainer, setEdges, setNodes]);
 
   const dissolve = useCallback(() => {
     const target = selectedContainer();
     if (!target) return setNote("select a Beat first");
     if (target.type !== SUBGRAPH_TYPE) return setNote(`${target.data.label} is not promoted`);
+    pushHistory(nodes as RFNode[], edges);
     const out = dissolveSubgraph(target.id, asCore(nodes as RFNode[]), asCoreEdges(edges));
     const done = decorate(asRF(sortParentsFirst(out.nodes)), asRFEdges(out.edges));
     setNodes(done.nodes);
     setEdges(done.edges);
     setNote(`dissolved ${target.data.label} — rails merged back to direct wires`);
     return undefined;
-  }, [edges, nodes, selectedContainer, setEdges, setNodes]);
+  }, [edges, nodes, pushHistory, selectedContainer, setEdges, setNodes]);
 
   const beats = (nodes as RFNode[]).filter(isContainer);
   const promoted = beats.filter((b) => b.type === SUBGRAPH_TYPE).length;
@@ -533,6 +627,9 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
           <button type="button" onClick={promote}>Subgraph</button>
           <button type="button" onClick={dissolve}>Dissolve</button>
           <button type="button" onClick={deleteSelection}>Delete</button>
+          <span className="bd-sep" />
+          <button type="button" onClick={undo} title="Ctrl+Z">Undo</button>
+          <button type="button" onClick={repair} title="Re-derive every boundary from the wires">Repair</button>
           <button
             type="button"
             onClick={() => {
