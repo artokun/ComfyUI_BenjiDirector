@@ -55,9 +55,10 @@ owns the topology — what is nested in what, and which continuity rails cross w
 ## What is next
 
 Supervising Calliope from the orchestrator (so `npm run calliope:up` is not even a step),
-then the node context menu and a prompt-quality pass against Calliope's own templates. One upstream fix is prepared:
-Calliope 1.2.1's scene PATCH silently ignores an explicit `null`, so a scene cannot leave
-its Beat — the module detects and reverts that today, and the fix will go up as a PR.
+then the node context menu and a prompt-quality pass against Calliope's own templates. The first fork-only fix is
+in: Calliope 1.2.1's scene PATCH silently ignored an explicit `null`, so a scene could not
+leave its Beat — the module still detects and reverts an ignored write, and the fork's
+`main` clears the field properly.
 
 ## Layout
 
@@ -77,7 +78,9 @@ idempotent, and what lets your rail labels and ordering survive dragging a scene
 
 ## Run Calliope
 
-One command, idempotent, pinned to the Calliope commit this module was validated against:
+One command, idempotent, pinned to a commit of **our fork** (`artokun/Calliope`, upstream
+`benjiyaya/Calliope`) — the fork carries the fixes this module needs before they land
+upstream, and is where we are free to deviate:
 
 ```bash
 npm run calliope:up
