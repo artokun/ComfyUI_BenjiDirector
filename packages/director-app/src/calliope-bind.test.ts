@@ -73,9 +73,10 @@ describe("projectToGraph", () => {
   });
 
   it("honours a saved position and pin from video_settings.director", () => {
-    const g2 = projectToGraph({ story, scenes: [sceneRow(1, 0, 1, { video_settings: { director: { position: { x: 123, y: 456 }, promoted: true } } })] });
+    // (123, 150) sits inside Beat 1's default box; a position outside it is refused (below).
+    const g2 = projectToGraph({ story, scenes: [sceneRow(1, 0, 1, { video_settings: { director: { position: { x: 123, y: 150 }, promoted: true } } })] });
     const n = g2.nodes.find((x) => x.id === "cal-sc-1")!;
-    expect(n.position).toEqual({ x: 123, y: 456 });
+    expect(n.position).toEqual({ x: 123, y: 150 });
     expect((n.data as { promoted?: boolean }).promoted).toBe(true);
   });
 
