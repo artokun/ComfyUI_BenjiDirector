@@ -42,10 +42,9 @@ import {
   uniquifyLabel,
   type BoundaryPort,
   type GraphEdge,
-  type GraphNode,
-} from "@benjidirector/graph-core";
+  type GraphNode, isRelayHandle } from "@benjidirector/graph-core";
 import { CalliopeClient, probe, resolveConfig, type ReachabilityState, type Schemas } from "@benjidirector/calliope-client";
-import { calId, projectToGraph } from "./calliope-bind.js";
+import { calId, calliopeRef, projectToGraph } from "./calliope-bind.js";
 import { applyIntents, diffForCalliope } from "./calliope-sync.js";
 import { ActionsContext, type EditorActions } from "./actions.js";
 import {
@@ -539,6 +538,57 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
     },
     [client, setEdges, setNodes],
   );
+
+  /**
+   * Re-read the loaded project and MERGE it into the canvas.
+   *
+   * Unlike loadProject this keeps everything Calliope cannot store — a Beat's subgraph-ness,
+   * collapse, colour and size, the rails, and the positions dragged since — because an agent
+   * that adds one scene must not cost the user their layout. Calliope stays authoritative for
+   * what it does own: which Beat a scene is in, the ref and continuity wires, the rows
+   * themselves. Rows that vanished leave the canvas; rows that appeared are laid out fresh.
+   * Not an edit, so it neither writes back nor lands in undo.
+   */
+  const refreshProject = useCallback(async () => {
+    const pid = loadedProjectRef.current;
+    if (pid === null) return;
+    const [story, scenesRes] = await Promise.all([client.story.get(pid), client.scenes.list(pid)]);
+    settingsCache.current = new Map(scenesRes.scenes.map((sc) => [sc.id, sc.video_settings ?? {}]));
+    const fresh = projectToGraph({ story, scenes: scenesRes.scenes });
+    const current = asCore(nodesRef.current as RFNode[]);
+    const cur = new Map(current.map((n) => [n.id, n] as const));
+    const KEEP = ["color", "collapsed", "expandedWidth", "expandedHeight", "collapsedWidth", "collapsedHeight", "promoted"] as const;
+    const merged: GraphNode<DirectorData>[] = fresh.nodes.map((fn) => {
+      const c = cur.get(fn.id);
+      if (!c) return fn as GraphNode<DirectorData>;
+      const keep: Record<string, unknown> = {};
+      for (const k of KEEP) if (k in c.data) keep[k] = (c.data as unknown as Record<string, unknown>)[k];
+      // A scene's Beat is Calliope's call; if it changed, the fresh layout inside the new Beat
+      // is the only sensible position. Otherwise the canvas position wins.
+      const isScene = fn.data.kind === "scene";
+      const moved = isScene && (c.parentId ?? undefined) !== (fn.parentId ?? undefined);
+      return {
+        ...fn,
+        type: c.type ?? fn.type,
+        parentId: isScene ? fn.parentId : c.parentId,
+        position: moved ? fn.position : c.position,
+        width: c.width ?? fn.width,
+        height: c.height ?? fn.height,
+        data: { ...fn.data, ...keep },
+      } as GraphNode<DirectorData>;
+    });
+    const freshIds = new Set(merged.map((n) => n.id));
+    // Nodes the editor invented have no row to vanish from; they stay.
+    for (const c of current) if (!calliopeRef(c.id) && !freshIds.has(c.id)) merged.push(c);
+    const keptIds = new Set(merged.map((n) => n.id));
+    const localEdges = asCoreEdges(edgesRef.current).filter(
+      (e) => keptIds.has(e.source) && keptIds.has(e.target) && (!calliopeRef(e.source) || !calliopeRef(e.target)) && !isRelayHandle(e.sourceHandle) && !isRelayHandle(e.targetHandle),
+    );
+    const edgeIds = new Set(fresh.edges.map((e) => e.id));
+    const edges = [...fresh.edges, ...localEdges.filter((e) => !edgeIds.has(e.id))];
+    settle(asRF(sortParentsFirst(merged)), asRFEdges(edges), { sync: false });
+    setNote(`refreshed “${story.project.title}” — ${story.beats.length} beats, ${scenesRes.scenes.length} scenes, ~${scenesRes.estimated_duration_sec}s`);
+  }, [client, settle]);
 
   /** Canvas-relative menu coordinates. `fixed` would resolve against the panel's transform. */
   const canvasPoint = useCallback((clientX: number, clientY: number) => {
@@ -1106,6 +1156,53 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
             settle(ns.filter((n) => !doomed.has(n.id)), es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target)), { reparent: false });
             return { removed: [...doomed] };
           });
+        case "calliope": {
+          // Passthrough to the Calliope client: { ns, op, args }. The client is the one place
+          // that knows the routes, so the tool layer names (ns, op) and the lookup happens
+          // here — a name that is not a client method is refused, never guessed. After a
+          // mutation the canvas is re-read and merged, so the agent sees what it did.
+          const ns = str(args.ns, "ns");
+          const op = str(args.op, "op");
+          if (!/^(projects|settings|story|scenes|workflows|jobs|assets|playground)$/.test(ns)) throw new Error(`no Calliope namespace "${ns}"`);
+          // `op` may be dotted — the story namespace nests: story.beat.create.
+          let self: unknown = client;
+          let fn: unknown = (client as unknown as Record<string, unknown>)[ns];
+          for (const part of op.split(".")) {
+            self = fn;
+            fn = fn && typeof fn === "object" ? (fn as Record<string, unknown>)[part] : undefined;
+          }
+          if (typeof fn !== "function") throw new Error(`no Calliope call "${ns}.${op}"`);
+          const list = Array.isArray(args.args) ? (args.args as unknown[]) : [];
+          return (fn as (...a: unknown[]) => Promise<unknown>).apply(self, list).then(async (result) => {
+            const leaf = op.split(".").pop() ?? op;
+            const reads = /^(list|get|queueStatus|uploads|previewPrompt|analyze)$/.test(leaf);
+            if (!reads && /^(story|scenes|assets|playground|projects)$/.test(ns) && loadedProjectRef.current !== null) await refreshProject();
+            return result;
+          });
+        }
+        case "scene_set_prompt": {
+          // Calliope honours a stored draft only while prompt_draft_meta.based_on matches the
+          // scene's current text hash, so the draft is written against the row as it is NOW;
+          // promptDraft() computes that hash from the fetched row.
+          const pid = num(args.project_id, "project_id");
+          const sid = num(args.scene_id, "scene_id");
+          const prompt = str(args.prompt, "prompt");
+          return client.scenes.list(pid).then(async (res) => {
+            const row = res.scenes.find((sc) => sc.id === sid);
+            if (!row) throw new Error(`scene ${sid} is not in project ${pid}`);
+            const out = await client.promptDraft(pid, row, prompt);
+            if (loadedProjectRef.current === pid) await refreshProject();
+            return out;
+          });
+        }
+        case "project_open":
+          return loadProject(args.project_id === null || args.project_id === undefined ? null : num(args.project_id, "project_id")).then(() => ({
+            project_id: loadedProjectRef.current,
+          }));
+        case "project_current":
+          return { project_id: loadedProjectRef.current, calliope: status };
+        case "project_refresh":
+          return refreshProject().then(() => ({ project_id: loadedProjectRef.current }));
         case "move_node":
           return run((ns, es) => {
             const target = find(ns, args.id);

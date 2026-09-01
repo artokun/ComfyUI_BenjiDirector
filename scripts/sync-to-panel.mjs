@@ -73,7 +73,7 @@ for (const f of [...files, "pane.js"]) {
   const src = f === "pane.js" ? join(ROOT, "panel", "pane.js") : join(built, f);
   const out = join(dest, f);
   let body = readFileSync(src);
-  if (f === "pane.js") body = Buffer.from(body.toString("utf8").replace("__BUNDLE_HASH__", bundleHash));
+  if (f === "pane.js") body = Buffer.from(body.toString("utf8").replace(/__BUNDLE_HASH__/g, bundleHash));
   if (check) {
     const current = existsSync(out) ? readFileSync(out) : null;
     if (!current || sha(current) !== sha(body)) {

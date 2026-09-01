@@ -348,7 +348,7 @@
 .react-flow__node-groupbox,
 .react-flow__node-subgraph,
 .react-flow__node-groupbox > .bd-group,
-.react-flow__node-subgraph > .bd-subgraph { pointer-events: none; }
+.react-flow__node-subgraph > .bd-subgraph { pointer-events: none !important; } /* React Flow sets `all` inline on the wrapper */
 .react-flow__node-groupbox > .bd-group > *,
 .react-flow__node-subgraph > .bd-subgraph > *,
 .react-flow__node-subgraph > .bd-collapsed { pointer-events: auto; }

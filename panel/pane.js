@@ -35,7 +35,8 @@ function ensureCss() {
   _cssInjected = true;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = new URL("./style.css", import.meta.url).href;
+  // Stamped like the JS import below, so a re-vendor cannot leave a browser on the old CSS.
+  link.href = new URL("./style.css?v=__BUNDLE_HASH__", import.meta.url).href;
   document.head.appendChild(link);
 }
 
