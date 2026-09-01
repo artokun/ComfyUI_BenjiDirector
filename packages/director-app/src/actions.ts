@@ -25,7 +25,7 @@ export interface EditorActions {
   setColor(containerId: string, color: string | undefined): void;
   /** Merge a partial payload into a node's data. Every compact control writes through here. */
   updateNode(nodeId: string, patch: NodePatch): void;
-  saveBlueprint(containerId: string): void;
+  saveBlueprint(containerId: string, name?: string): void;
 }
 
 export const ActionsContext = createContext<EditorActions | null>(null);

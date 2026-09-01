@@ -230,11 +230,16 @@ interface PaletteState {
   wire: WireIntent | null;
 }
 
+/** One editor command by name, as the agent drives it. Rejects with a readable Error. */
+export type DriveFn = (name: string, args: Record<string, unknown>) => Promise<unknown>;
+
 export interface DirectorAppProps {
   calliopeBaseUrl?: string;
+  /** Filled by the editor on mount; the bundle's `drive()` calls through it. */
+  apiRef?: { current: DriveFn | null };
 }
 
-function Editor({ calliopeBaseUrl }: DirectorAppProps) {
+function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
   // Decorate ONCE at state init rather than in a mount effect. An effect that reaches for the
   // `nodes` state of its own first render to rebuild `edges` is a footgun: it ran, produced an
   // empty edge set, and the canvas came up with six nodes and no wires at all.
@@ -667,11 +672,14 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
     });
   }, [settle, withCurrent]);
 
-  /** Wrap the selection in a new Beat, sized from its own bounds. */
-  const groupSelection = useCallback(() => {
+  /** Wrap the chosen nodes in a new Beat, sized from their own bounds. Returns the Beat id. */
+  const groupNodes = useCallback((pick: (n: RFNode) => boolean, title?: string): string | undefined => {
     const all = nodesRef.current as RFNode[];
-    const chosen = all.filter((n) => n.selected && !isContainer(n));
-    if (chosen.length === 0) return setNote("select the scenes you want to group first");
+    const chosen = all.filter((n) => pick(n) && !isContainer(n));
+    if (chosen.length === 0) {
+      setNote("select the scenes you want to group first");
+      return undefined;
+    }
     const core = asCore(all);
     const PAD = 46;
     const HEAD = 34;
@@ -684,7 +692,7 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
     const maxX = Math.max(...boxes.map((b) => b.x + b.w)) + PAD;
     const maxY = Math.max(...boxes.map((b) => b.y + b.h)) + PAD;
     const id = `beat-${Date.now().toString(36)}`;
-    const container = beat(id, `Beat ${all.filter(isContainer).length + 1}`, { x: minX, y: minY }, { width: maxX - minX, height: maxY - minY });
+    const container = beat(id, title ?? `Beat ${all.filter(isContainer).length + 1}`, { x: minX, y: minY }, { width: maxX - minX, height: maxY - minY });
     const chosenIds = new Set(chosen.map((n) => n.id));
     withCurrent((ns, es) => {
       const next = [
@@ -698,8 +706,10 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
       setNote(`grouped ${chosen.length} node${chosen.length === 1 ? "" : "s"} into ${container.data.label}`);
       settle(next, es, { reparent: false });
     });
-    return undefined;
+    return id;
   }, [settle, withCurrent]);
+
+  const groupSelection = useCallback(() => groupNodes((n) => !!n.selected), [groupNodes]);
 
   const convert = useCallback(
     (containerId: string, to: "group" | "subgraph") => {
@@ -824,11 +834,11 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
           settle(next, es, { reparent: false });
         });
       },
-      saveBlueprint(containerId) {
+      saveBlueprint(containerId, presetName) {
         const all = nodesRef.current as RFNode[];
         const target = all.find((n) => n.id === containerId);
         if (!target || !isContainer(target)) return;
-        const name = window.prompt("Blueprint name", target.data.label)?.trim();
+        const name = (presetName ?? window.prompt("Blueprint name", target.data.label) ?? "").trim();
         if (!name) return;
         // Store the LOGICAL wiring: rails are derived, so a saved subgraph is dissolved first
         // and re-promoted on placement through the same algebra that built it.
@@ -894,6 +904,280 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
   );
 
   const selectedContainer = useCallback(() => (nodesRef.current as RFNode[]).find((n) => n.selected && isContainer(n)), []);
+
+  /**
+   * The editor's own validation. A wire carries one type end to end; the `+` slot is exempt
+   * because it AUTHORS a port of whatever type is dropped on it. This is the check a tool call
+   * goes through too — `connect` routes through the same addWire the mouse uses.
+   */
+  const isValidConnection = useCallback((c: Connection | Edge): boolean => {
+    if (parseEmptySlotHandle(c.sourceHandle) || parseEmptySlotHandle(c.targetHandle)) return true;
+    const types = handleTypes(nodesRef.current as RFNode[]);
+    const a = types.get(c.sourceHandle ?? "");
+    const b = types.get(c.targetHandle ?? "");
+    return !!a && a === b;
+  }, []);
+
+  // ── the agent's entry point ────────────────────────────────────────────────────────
+  //
+  // Every command below is the mouse's own path with the mouse removed: add_node uses
+  // makeNode and settle, connect uses addWire behind the same isValidConnection, promote uses
+  // the same algebra. The editor mints ids; the agent gets them back from `outline`.
+  useEffect(() => {
+    if (!apiRef) return undefined;
+    const run = <T,>(fn: (ns: RFNode[], es: Edge[]) => T, opts: { history?: boolean } = {}) =>
+      new Promise<T>((resolve, reject) => {
+        withCurrent((ns, es) => {
+          try {
+            resolve(fn(ns, es));
+          } catch (err) {
+            reject(err);
+          }
+        }, opts);
+      });
+    const find = (ns: RFNode[], id: unknown): RFNode => {
+      const n = ns.find((x) => x.id === id);
+      if (!n) throw new Error(`no node "${String(id)}" — read the outline for ids`);
+      return n;
+    };
+    const num = (v: unknown, what: string): number => {
+      if (typeof v !== "number" || Number.isNaN(v)) throw new Error(`${what} must be a number`);
+      return v;
+    };
+    const str = (v: unknown, what: string): string => {
+      if (typeof v !== "string" || !v) throw new Error(`${what} must be a non-empty string`);
+      return v;
+    };
+    const nodeIdOfHandle = (ns: RFNode[], handle: string): string => {
+      if (handle.includes("::")) {
+        const cid = handle.slice(0, handle.indexOf("::"));
+        if (ns.some((n) => n.id === cid)) return cid;
+        throw new Error(`no Beat owns rail "${handle}"`);
+      }
+      const i = handle.indexOf(":");
+      return i > 0 ? handle.slice(0, i) : handle;
+    };
+    const summarize = (n: RFNode) => {
+      const base = { id: n.id, type: n.type, label: n.data.label, parentId: n.parentId ?? null, position: n.position, hidden: !!n.hidden };
+      if (isContainer(n)) {
+        const d = rails(n);
+        return { ...base, collapsed: !!d.collapsed, color: d.color ?? null, promotedIn: d.promotedIn, promotedOut: d.promotedOut, faces: d.faces ?? [], blueprintId: d.blueprintId ?? null };
+      }
+      const d = n.data as SceneData | AssetData;
+      return {
+        ...base,
+        kind: d.kind,
+        ...(d.kind === "scene" ? { heading: d.heading, durationSec: d.durationSec ?? null, videoPath: d.videoPath ?? null } : { asset: d.asset }),
+        promoted: !!d.promoted,
+        inSubgraph: !!d.inSubgraph,
+        ports: d.ports.map((p) => ({ id: p.id, type: p.type, isInput: p.isInput, label: p.label })),
+      };
+    };
+    const summarizeEdge = (e: Edge) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, relay: e.id.endsWith("__inneredge") });
+
+    apiRef.current = async (name, args) => {
+      switch (name) {
+        case "outline":
+          return run((ns, es) => ({ nodes: ns.map(summarize), edges: es.map(summarizeEdge), blueprints: Object.values(loadBlueprints()).map((b) => ({ id: b.id, label: b.label, nodes: b.nodes.length })) }), { history: false });
+        case "read_node":
+          return run((ns) => summarize(find(ns, args.id)), { history: false });
+        case "add_node": {
+          const kind = str(args.kind, "kind") as NodeKind;
+          const node = makeNode(kind, { x: num(args.x, "x"), y: num(args.y, "y") });
+          if (typeof args.label === "string" && args.label) {
+            node.data = node.data.kind === "scene" ? { ...node.data, label: args.label, heading: args.label } : { ...node.data, label: args.label };
+          }
+          return run((ns, es) => {
+            settle([...ns, node as unknown as RFNode], es);
+            return { id: node.id, label: node.data.label };
+          });
+        }
+        case "remove_node":
+          return run((ns, es) => {
+            const target = find(ns, args.id);
+            const doomed = new Set<string>([target.id]);
+            let grew = true;
+            while (grew) {
+              grew = false;
+              for (const n of ns) if (!doomed.has(n.id) && n.parentId && doomed.has(n.parentId)) { doomed.add(n.id); grew = true; }
+            }
+            settle(ns.filter((n) => !doomed.has(n.id)), es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target)), { reparent: false });
+            return { removed: [...doomed] };
+          });
+        case "move_node":
+          return run((ns, es) => {
+            const target = find(ns, args.id);
+            const abs = { x: num(args.x, "x"), y: num(args.y, "y") };
+            const parent = target.parentId ? ns.find((n) => n.id === target.parentId) : undefined;
+            const base = parent ? absolutePos(parent as unknown as GraphNode<DirectorData>, asCore(ns)) : { x: 0, y: 0 };
+            settle(ns.map((n) => (n.id === target.id ? ({ ...n, position: { x: abs.x - base.x, y: abs.y - base.y } } as RFNode) : n)), es);
+            return { id: target.id, position: abs };
+          });
+        case "set_title":
+          return run((ns, es) => {
+            const target = find(ns, args.id);
+            const label = str(args.label, "label");
+            settle(ns.map((n) => (n.id === target.id ? ({ ...n, data: n.data.kind === "scene" ? { ...n.data, label, heading: label } : { ...n.data, label } } as RFNode) : n)), es, { reparent: false });
+            return { id: target.id, label };
+          });
+        case "set_color":
+          return run((ns, es) => {
+            const target = find(ns, args.id);
+            if (!isContainer(target)) throw new Error("only a Beat takes a colour");
+            const color = str(args.color, "color");
+            settle(ns.map((n) => (n.id === target.id ? ({ ...n, data: { ...n.data, color } } as RFNode) : n)), es, { reparent: false });
+            return { id: target.id, color };
+          });
+        case "set_collapsed":
+          return run((ns, es) => {
+            const target = find(ns, args.id);
+            if (target.type !== SUBGRAPH_TYPE) throw new Error("only a subgraph collapses — promote the Beat first");
+            const want = !!args.collapsed;
+            if (!!rails(target).collapsed !== want) queueMicrotask(() => actions.toggleCollapse(target.id));
+            return { id: target.id, collapsed: want };
+          }, { history: false });
+        case "set_parent":
+          return run((ns, es) => {
+            const target = find(ns, args.id);
+            const parentId = args.parent_id === null ? undefined : str(args.parent_id, "parent_id");
+            if (parentId) {
+              const parent = find(ns, parentId);
+              if (!isContainer(parent)) throw new Error(`"${parentId}" is not a Beat`);
+              if (parentId === target.id) throw new Error("a Beat cannot contain itself");
+            }
+            const core = asCore(ns);
+            const abs = absolutePos(target as unknown as GraphNode<DirectorData>, core);
+            const base = parentId ? absolutePos(find(ns, parentId) as unknown as GraphNode<DirectorData>, core) : { x: 0, y: 0 };
+            const next = ns.map((n) => {
+              if (n.id !== target.id) return n;
+              const moved = { ...n, position: { x: abs.x - base.x, y: abs.y - base.y } } as RFNode;
+              if (parentId) moved.parentId = parentId;
+              else delete moved.parentId;
+              return moved;
+            });
+            settle(next, es, { reparent: false });
+            return { id: target.id, parentId: parentId ?? null };
+          });
+        case "set_pin":
+          return run((ns, es) => {
+            const target = find(ns, args.id);
+            if (isContainer(target)) throw new Error("pin a Scene or an asset, not a Beat");
+            if (!(target.data as SceneData).inSubgraph) throw new Error("a pin only means something inside a subgraph");
+            const promoted = !!args.promoted;
+            settle(ns.map((n) => (n.id === target.id ? ({ ...n, data: { ...n.data, promoted } } as RFNode) : n)), es, { reparent: false });
+            return { id: target.id, promoted };
+          });
+        case "connect":
+          return run((ns, es) => {
+            const sh = str(args.source_handle, "source_handle");
+            const th = str(args.target_handle, "target_handle");
+            const source = nodeIdOfHandle(ns, sh);
+            const target = nodeIdOfHandle(ns, th);
+            find(ns, source);
+            find(ns, target);
+            const types = handleTypes(ns);
+            const a = types.get(sh);
+            const b = types.get(th);
+            if (!a) throw new Error(`no such handle "${sh}"`);
+            if (!b) throw new Error(`no such handle "${th}"`);
+            if (a !== b) throw new Error(`type mismatch: ${sh} is ${a}, ${th} is ${b}`);
+            const edge: Edge = { id: `lg:${sh}->${th}`, source, target, sourceHandle: sh, targetHandle: th };
+            settle(ns, [...es.filter((e) => !(e.target === target && e.targetHandle === th)), edge], { reparent: false });
+            return { id: edge.id, type: a };
+          });
+        case "disconnect":
+          return run((ns, es) => {
+            const before = es.length;
+            const kept = typeof args.edge_id === "string"
+              ? es.filter((e) => e.id !== args.edge_id)
+              : es.filter((e) => e.targetHandle !== args.target_handle);
+            if (kept.length === before) throw new Error("no wire matched");
+            settle(ns, kept, { reparent: false });
+            return { removed: before - kept.length };
+          });
+        case "repair":
+          return run((ns, es) => {
+            settle(ns, es, { reparent: true });
+            return { ok: true };
+          });
+        case "promote":
+        case "dissolve":
+          return run((ns, es) => {
+            const target = find(ns, args.id);
+            if (!isContainer(target)) throw new Error(`"${target.id}" is not a Beat`);
+            const toSub = name === "promote";
+            if (toSub && target.type === SUBGRAPH_TYPE) return { id: target.id, subgraph: true, note: "already a subgraph" };
+            if (!toSub && target.type !== SUBGRAPH_TYPE) return { id: target.id, subgraph: false, note: "already a group" };
+            const out = toSub
+              ? promoteToSubgraph(target.id, asCore(ns), asCoreEdges(es), directorHost)
+              : dissolveSubgraph(target.id, asCore(ns), asCoreEdges(es));
+            settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
+            const r = out.nodes.find((n) => n.id === target.id)?.data as BeatData;
+            return { id: target.id, subgraph: toSub, promotedIn: r.promotedIn, promotedOut: r.promotedOut };
+          });
+        case "reconcile":
+          return run((ns, es) => {
+            find(ns, args.id);
+            settle(ns, es, { reparent: false });
+            return { ok: true };
+          });
+        case "set_rail_label":
+          return run((ns) => {
+            const target = find(ns, args.id);
+            const d = rails(target);
+            const pid = str(args.port_id, "port_id");
+            const side = d.promotedIn.some((p) => p.id === pid) ? "in" : d.promotedOut.some((p) => p.id === pid) ? "out" : null;
+            if (!side) throw new Error(`"${pid}" is not a rail on ${target.id}`);
+            queueMicrotask(() => actions.renameRail(target.id, side, pid, str(args.label, "label")));
+            return { id: target.id, port_id: pid };
+          }, { history: false });
+        case "reorder_rail":
+          return run((ns) => {
+            const target = find(ns, args.id);
+            const side = args.side === "out" ? "out" : "in";
+            queueMicrotask(() => actions.reorderRail(target.id, side, num(args.from, "from"), num(args.to, "to")));
+            return { id: target.id, side };
+          }, { history: false });
+        case "group": {
+          const ids = Array.isArray(args.node_ids) ? (args.node_ids as unknown[]).map((v) => str(v, "node_ids[]")) : [];
+          if (!ids.length) throw new Error("node_ids must name at least one node");
+          const set = new Set(ids);
+          const beatId = groupNodes((n) => set.has(n.id), typeof args.label === "string" ? args.label : undefined);
+          if (!beatId) throw new Error("nothing groupable among those ids (Beats cannot be grouped)");
+          return { id: beatId };
+        }
+        case "save_blueprint":
+          return run((ns) => {
+            const target = find(ns, args.id);
+            if (target.type !== SUBGRAPH_TYPE) throw new Error("save a SUBGRAPH as a blueprint — promote the Beat first");
+            queueMicrotask(() => actions.saveBlueprint(target.id, str(args.name, "name")));
+            return { id: target.id, name: args.name };
+          }, { history: false });
+        case "list_blueprints":
+          return Object.values(loadBlueprints()).map((b) => ({ id: b.id, label: b.label, nodes: b.nodes.length, savedAt: b.savedAt }));
+        case "apply_blueprint": {
+          const bp = loadBlueprints()[str(args.blueprint_id, "blueprint_id")];
+          if (!bp) throw new Error(`no blueprint "${String(args.blueprint_id)}" — list_blueprints names them`);
+          const at = { x: num(args.x, "x"), y: num(args.y, "y") };
+          return run((ns, es) => {
+            const inst = instantiateBlueprint(bp, at);
+            const merged = [...ns, ...asRF(inst.nodes)];
+            const mergedEdges = [...es, ...asRFEdges(inst.edges)];
+            if (inst.promote) {
+              const out = promoteToSubgraph(inst.rootId, asCore(merged), asCoreEdges(mergedEdges), directorHost);
+              settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
+            } else settle(merged, mergedEdges, { reparent: false });
+            return { id: inst.rootId, blueprint: bp.id };
+          });
+        }
+        default:
+          throw new Error(`unknown director command "${name}"`);
+      }
+    };
+    return () => {
+      apiRef.current = null;
+    };
+  }, [actions, apiRef, groupNodes, settle, withCurrent]);
 
   // ── palette items ────────────────────────────────────────────────────────────────────
 
@@ -984,6 +1268,7 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
                 onConnect={onConnect}
                 onConnectStart={onConnectStart}
                 onConnectEnd={onConnectEnd}
+                isValidConnection={isValidConnection}
                 connectionLineComponent={CarryLine}
                 onPaneClick={() => setPalette(null)}
                 onPaneContextMenu={(e) => {
