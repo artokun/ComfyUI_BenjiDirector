@@ -62,10 +62,18 @@ const norm = (buf) => buf.toString("utf8").replace(/\r\n/g, "\n");
 const sha = (buf) => createHash("sha256").update(norm(buf)).digest("hex");
 
 let drift = 0;
+// Content hash of the bundle, stamped into pane.js's dynamic import so the browser cannot
+// serve a stale editor after an update.
+const bundleHash = createHash("sha256")
+  .update(readFileSync(join(built, "director-app.js")))
+  .digest("hex")
+  .slice(0, 12);
+
 for (const f of [...files, "pane.js"]) {
   const src = f === "pane.js" ? join(ROOT, "panel", "pane.js") : join(built, f);
   const out = join(dest, f);
-  const body = readFileSync(src);
+  let body = readFileSync(src);
+  if (f === "pane.js") body = Buffer.from(body.toString("utf8").replace("__BUNDLE_HASH__", bundleHash));
   if (check) {
     const current = existsSync(out) ? readFileSync(out) : null;
     if (!current || sha(current) !== sha(body)) {

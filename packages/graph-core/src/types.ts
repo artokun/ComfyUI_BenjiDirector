@@ -162,3 +162,24 @@ export const isRelayHandle = (handleId: string | null | undefined): boolean =>
   !!handleId && handleId.endsWith(INNER_SUFFIX);
 export const outerHandleId = (handleId: string): string =>
   isRelayHandle(handleId) ? handleId.slice(0, -INNER_SUFFIX.length) : handleId;
+
+/**
+ * Handle id for a rail's trailing EMPTY slot.
+ *
+ * Every rail ends in a `+` pill whose whole body is a drop target. Wiring a child into it
+ * authors a new boundary port — which is the only way to create a rail that no crossing edge
+ * would have produced, i.e. a pinned one. Which side it lands on is decided by the rail the
+ * pill sits on, not by anything about the wire.
+ */
+export const emptySlotHandle = (containerId: string, side: "in" | "out", inner: boolean): string =>
+  `${containerId}::+${side}${inner ? "__inner" : ""}`;
+
+/** Recognise an empty-slot handle and say which container and rail it belongs to. */
+export function parseEmptySlotHandle(
+  handleId: string | null | undefined,
+): { containerId: string; side: "in" | "out"; inner: boolean } | undefined {
+  if (!handleId) return undefined;
+  const m = /^(.*)::\+(in|out)(__inner)?$/.exec(handleId);
+  if (!m || m[1] === undefined || m[2] === undefined) return undefined;
+  return { containerId: m[1], side: m[2] as "in" | "out", inner: !!m[3] };
+}

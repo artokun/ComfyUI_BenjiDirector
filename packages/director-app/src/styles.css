@@ -111,38 +111,94 @@
 }
 .bd-hint { font-weight: 400; font-size: 11px; color: var(--bd-dim); }
 
-.bd-rail { position: absolute; top: 2rem; display: flex; flex-direction: column; gap: 6px; }
-.bd-rail-in { left: -0.5rem; align-items: flex-start; }
-.bd-rail-out { right: -0.5rem; align-items: flex-end; }
+/* A rail STRADDLES the container edge, vertically centred — half the pill outside, half in.
+   That is what makes the outer handle read as facing the world and the inner one as facing the
+   children. `nodrag` on the pills keeps React Flow from panning while you reorder. */
+.bd-rail {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+}
+.bd-rail-in { left: 0; }
+.bd-rail-out { left: 100%; }
+
 .bd-pill {
   position: relative;
-  background: #241a33;
+  background: #2a1f3d;
   border: 1px solid var(--bd-accent);
   border-radius: 999px;
-  padding: 0.1rem 0.7rem;
+  padding: 0 0.75rem;
   font-size: 11px;
-  height: 24px;
   display: flex;
   align-items: center;
+  justify-content: center;
+  min-width: 84px;
   max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  cursor: grab;
+  user-select: none;
 }
+.bd-pill:hover { background: #362a4d; }
+.bd-pill.is-drag-over { outline: 1px dashed var(--bd-accent); outline-offset: 2px; }
+.bd-pill-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bd-pill.is-pinned { border-style: dashed; }
-.bd-pill.is-pinned::after { content: "📌"; margin-left: 0.3rem; font-size: 9px; }
+.bd-pill.is-pinned .bd-pill-label::after { content: " 📌"; font-size: 9px; }
+
+.bd-pill-input {
+  width: 100%;
+  background: #16161c;
+  color: var(--bd-text);
+  border: 1px solid var(--bd-accent);
+  border-radius: 999px;
+  font: inherit;
+  text-align: center;
+  padding: 0 0.3rem;
+  outline: none;
+}
+
+/* The trailing "+" slot. Dashed and dim so it reads as an affordance, not a port. */
+.bd-pill-empty {
+  border-style: dashed;
+  border-color: #6d5a86;
+  background: rgb(192 132 252 / 0.06);
+  color: var(--bd-dim);
+  cursor: copy;
+}
+.bd-pill-empty:hover { border-color: var(--bd-accent); background: rgb(192 132 252 / 0.14); }
+.bd-pill-plus { font-weight: 700; }
+
+.bd-caret {
+  background: none;
+  border: none;
+  color: var(--bd-text);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 0.2rem;
+  line-height: 1;
+}
 
 .bd-collapsed {
   background: var(--bd-panel);
   border: 2px solid var(--bd-accent);
   border-radius: 10px;
-  padding: 0.5rem 0.6rem;
-  min-width: 240px;
-  min-height: 90px;
+  padding: 0.45rem 0.55rem;
+  min-width: 260px;
   position: relative;
 }
-.bd-collapsed-body { display: flex; justify-content: space-between; min-height: 40px; margin-top: 0.4rem; }
-.bd-collapsed .bd-rail { position: static; }
+.bd-collapsed-head { display: flex; align-items: center; gap: 0.35rem; font-weight: 600; }
+.bd-collapsed-title { white-space: nowrap; }
+.bd-collapsed-body {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 0.5rem;
+  min-height: 24px;
+}
+/* Collapsed: the rails sit INSIDE the card body rather than straddling an edge. */
+.bd-collapsed .bd-rail { position: static; transform: none; }
 .bd-collapsed .bd-rail-out { align-items: flex-end; }
 
 /* React Flow's own chrome, toned to match. */
