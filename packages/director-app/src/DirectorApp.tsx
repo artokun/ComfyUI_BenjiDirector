@@ -667,9 +667,14 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
             onPaneContextMenu={(e) => {
               e.preventDefault();
               const ev = e as unknown as MouseEvent;
+              // Position the menu RELATIVE TO THE CANVAS, not the viewport. `position: fixed`
+              // resolves against the nearest ancestor with a transform, and the panel's
+              // .cmcp-modal has one — so viewport coordinates landed the menu roughly the
+              // width of the docked chat pane to the right of the cursor.
+              const box = canvasRef.current?.getBoundingClientRect();
               setMenu({
-                x: ev.clientX,
-                y: ev.clientY,
+                x: ev.clientX - (box?.left ?? 0),
+                y: ev.clientY - (box?.top ?? 0),
                 flow: screenToFlowPosition({ x: ev.clientX, y: ev.clientY }),
               });
             }}

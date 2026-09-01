@@ -55,7 +55,7 @@
   font-size: 12px;
 }
 
-.bd-canvas { flex: 1; min-height: 0; }
+.bd-canvas { flex: 1; min-height: 0; position: relative; }
 
 /* ── nodes ─────────────────────────────────────────────────────────────────── */
 
@@ -225,9 +225,10 @@
 .bd-face-detail { color: #86efac; font-size: 10px; text-transform: uppercase; }
 .bd-faces-empty { color: var(--bd-dim); font-size: 10px; font-style: italic; text-align: center; padding: .3rem 0; }
 
-/* Right-click palette. Fixed-positioned because it is placed from client coordinates. */
+/* Right-click palette. ABSOLUTE within .bd-canvas, never fixed: `position: fixed` resolves
+   against the nearest transformed ancestor, and the panel's modal has a transform. */
 .bd-menu {
-  position: fixed; z-index: 40; min-width: 168px;
+  position: absolute; z-index: 40; min-width: 168px;
   background: var(--bd-panel); border: 1px solid var(--bd-line); border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0 0 0 / .5); padding: 4px; display: flex; flex-direction: column; gap: 2px;
 }
