@@ -8,15 +8,15 @@ beside it — so you can watch it build a sequence and reach in and change anyth
 on the same graph, at the same time.
 
 Rendering is done by **[Calliope](https://github.com/benjiyaya/Calliope)** (MIT, © Benjiyaya),
-used headless: we drive its HTTP API and render our own editor rather than embedding its
-frontend. Calliope owns the content — projects, beats, scenes, characters, jobs. This module
+used headless through [our fork](https://github.com/artokun/Calliope): we drive its HTTP API
+and render our own editor rather than embedding its frontend. Calliope owns the content — projects, beats, scenes, characters, jobs. This module
 owns the topology — what is nested in what, and which continuity rails cross which boundary.
 
 > **Status: working prototype, not yet released.** The editor runs live inside the ComfyUI
 > agent panel, loads a Calliope project onto the canvas and writes edits back, and the
-> agent has ten tools that mount with the pane. Calliope bring-up (one install) is next.
-> See `docs/diagrams/` for the approach, `docs/agent-playbook.md` for how the agent is
-> meant to work a film, and the sections below for what exists today.
+> agent has ten tools that mount with the pane, one of which brings Calliope up. See
+> `docs/diagrams/` for the approach, `docs/agent-playbook.md` for how the agent is meant
+> to work a film, and the sections below for what exists today.
 >
 > Setup is a first-class goal, not an afterthought: the target is that a user installs the
 > panel and this works, without hand-assembling a Python venv to get there.
@@ -54,11 +54,11 @@ owns the topology — what is nested in what, and which continuity rails cross w
 
 ## What is next
 
-Supervising Calliope from the orchestrator (so `npm run calliope:up` is not even a step),
-then the node context menu and a prompt-quality pass against Calliope's own templates. The first fork-only fix is
-in: Calliope 1.2.1's scene PATCH silently ignored an explicit `null`, so a scene could not
-leave its Beat — the module still detects and reverts an ignored write, and the fork's
-`main` clears the field properly.
+The node context menu, a prompt-quality pass against Calliope's own templates, and a
+first film rendered end to end on camera. The first fork-only fix is in: Calliope 1.2.1's
+scene PATCH silently ignored an explicit `null`, so a scene could not leave its Beat — the
+module still detects and reverts an ignored write, and the fork's `main` clears the field
+properly.
 
 ## Layout
 
@@ -110,13 +110,14 @@ node scripts/sync-to-panel.mjs --panel ../comfyui-mcp-panel
 
 ## Who builds this
 
-We do. This is a full build on our side — Calliope is used as-is, through its public API,
-and the integration work does not ask anything of the Calliope maintainers.
+We do. This is a full build on our side — Calliope is used through its public API, from a
+fork we maintain, and the integration work does not ask anything of the Calliope
+maintainers. The fork exists so this module never waits: fixes land there first, and it is
+where we are free to deviate as the Director grows past what Calliope's own UI needs.
 
-What we *do* want from that side is correction: if this module drives Calliope in a way that
+What we *do* want from upstream is correction: if this module drives Calliope in a way that
 is wrong, unidiomatic, or about to be broken by an upcoming change, an issue saying so is
-worth more than a PR. If we need something Calliope does not expose, we open the PR upstream
-ourselves rather than forking or patching around it.
+worth more than a PR. Fixes that make sense for everyone go up as PRs when they fit.
 
 Two things worth knowing before touching the code:
 
