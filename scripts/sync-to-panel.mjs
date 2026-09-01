@@ -54,7 +54,12 @@ if (!existsSync(built)) {
 
 const dest = join(panelRoot, DEST_SUBPATH);
 const files = readdirSync(built).filter((f) => !f.endsWith(".map"));
-const sha = (buf) => createHash("sha256").update(buf).digest("hex");
+
+// Compare CONTENT, not bytes. Git checks these files out with CRLF on Windows while a fresh
+// build emits LF, so a raw byte compare reports drift on every Windows checkout — and a guard
+// that cries wolf is one people learn to ignore, which is worse than not having it.
+const norm = (buf) => buf.toString("utf8").replace(/\r\n/g, "\n");
+const sha = (buf) => createHash("sha256").update(norm(buf)).digest("hex");
 
 let drift = 0;
 for (const f of [...files, "pane.js"]) {
