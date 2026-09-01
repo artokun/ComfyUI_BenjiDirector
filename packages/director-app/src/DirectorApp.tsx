@@ -335,6 +335,8 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
     probe(config).then((s) => {
       if (!live) return;
       setStatus(s);
+      // The setup card is the FALLBACK, not the plan: name the one-step fix, not six.
+      if (!s.reachable) setNote(`Calliope is not answering at ${config.baseUrl} — ask the agent to bring it up (it can), or run "npm run calliope:up".`);
       if (s.reachable) client.projects.list().then((ps) => live && setProjects(ps)).catch(() => undefined);
     });
     return () => {
@@ -1508,7 +1510,10 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
                   {syncState === "saving" ? "saving…" : syncState === "saved" ? "saved" : syncState === "error" ? "save failed" : "synced"}
                 </span>
               ) : null}
-              <span className={`bd-status ${status?.reachable ? "is-up" : "is-down"}`}>
+              <span
+                className={`bd-status ${status?.reachable ? "is-up" : "is-down"}`}
+                title={status && !status.reachable ? `Calliope is not answering at ${config.baseUrl}. Ask the agent to bring it up, or run "npm run calliope:up" in the BenjiDirector checkout.` : `Calliope at ${config.baseUrl}`}
+              >
                 {status === null ? "checking Calliope…" : status.reachable ? `Calliope ${status.health.version ?? "ok"}` : `Calliope unreachable — ${status.reason}`}
               </span>
             </div>
