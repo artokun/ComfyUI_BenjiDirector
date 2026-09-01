@@ -244,3 +244,25 @@
   background: #16161c; color: var(--bd-text); border: 1px solid var(--bd-accent);
   border-radius: 4px; font: inherit; font-weight: 600; padding: 0 .25rem; min-width: 120px; outline: none;
 }
+
+/* React Flow paints its own selection box-shadow on every node. Ours already says
+   "selected" with an accent border, and the two together read as a doubled outline —
+   especially on a Beat, where RF's rectangle ignores the rounded corners. */
+.bd-root .react-flow__node.selected,
+.bd-root .react-flow__node:focus,
+.bd-root .react-flow__node:focus-visible { box-shadow: none; outline: none; }
+.bd-group.is-selected, .bd-subgraph.is-selected {
+  border-color: var(--bd-accent);
+  box-shadow: 0 0 0 1px var(--bd-accent), 0 0 18px rgb(192 132 252 / .18);
+}
+
+.bd-nodebar-kind {
+  font-size: 9px; letter-spacing: .08em; color: var(--bd-dim);
+  align-self: center; padding-right: .2rem;
+}
+.bd-tbtn {
+  background: #2a2a35; color: var(--bd-text); border: 1px solid var(--bd-line);
+  border-radius: 6px; font: inherit; font-size: 11px; padding: .18rem .45rem; cursor: pointer;
+}
+.bd-tbtn:hover { border-color: var(--bd-accent); }
+.bd-tbtn.is-on { background: #3b1d5e; border-color: var(--bd-accent); color: #f3e8ff; }

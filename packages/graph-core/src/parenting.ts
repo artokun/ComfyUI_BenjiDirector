@@ -19,8 +19,8 @@ const DEFAULT_H = 60;
 function sizeOf(n: GraphNode<unknown>): { w: number; h: number } {
   const data = n.data as { width?: number; height?: number } | undefined;
   return {
-    w: n.measured?.width ?? data?.width ?? DEFAULT_W,
-    h: n.measured?.height ?? data?.height ?? DEFAULT_H,
+    w: n.measured?.width ?? n.width ?? data?.width ?? DEFAULT_W,
+    h: n.measured?.height ?? n.height ?? data?.height ?? DEFAULT_H,
   };
 }
 

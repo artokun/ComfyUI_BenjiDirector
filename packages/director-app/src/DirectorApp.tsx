@@ -126,8 +126,26 @@ function decorate(nodes: RFNode[], edges: Edge[]): { nodes: RFNode[]; edges: Edg
       return false;
     });
 
+  // A pin only means something inside a SUBGRAPH: it decides what shows on that subgraph's
+  // collapsed face. On a naked node, or one in a plain group, there is no face to show on.
+  const inSubgraph = (n: RFNode): boolean => {
+    let p = n.parentId;
+    const seen = new Set<string>();
+    while (p && !seen.has(p)) {
+      seen.add(p);
+      if (byId.get(p)?.type === SUBGRAPH_TYPE) return true;
+      p = byId.get(p)?.parentId;
+    }
+    return false;
+  };
+
   const outNodes = outNodes0.map((n) => {
-    if (!isContainer(n)) return n;
+    if (!isContainer(n)) {
+      const within = inSubgraph(n);
+      return (n.data as SceneData).inSubgraph === within
+        ? n
+        : ({ ...n, data: { ...n.data, inSubgraph: within } } as RFNode);
+    }
     const faces = descendantsOf(n.id)
       .filter((c) => (c.data as SceneData).promoted)
       .map((c) => {
@@ -469,6 +487,21 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
           );
         });
       },
+      convertContainer(containerId, to) {
+        const target = (nodes as RFNode[]).find((n) => n.id === containerId);
+        if (!target) return;
+        if (to === "subgraph" && target.type === SUBGRAPH_TYPE) return;
+        if (to === "group" && target.type !== SUBGRAPH_TYPE) return;
+        pushHistory(nodes as RFNode[], edges);
+        const out =
+          to === "subgraph"
+            ? promoteToSubgraph(containerId, asCore(nodes as RFNode[]), asCoreEdges(edges), directorHost)
+            : dissolveSubgraph(containerId, asCore(nodes as RFNode[]), asCoreEdges(edges));
+        const done = decorate(asRF(sortParentsFirst(out.nodes)), asRFEdges(out.edges));
+        setNodes(done.nodes);
+        setEdges(done.edges);
+        setNote(to === "subgraph" ? `${target.data.label} is now a subgraph` : `${target.data.label} is now a group`);
+      },
       togglePin(nodeId) {
         withCurrent((ns, es) => {
           const next = ns.map((n) =>
@@ -488,7 +521,7 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
         });
       },
     }),
-    [settle, withCurrent],
+    [edges, nodes, pushHistory, setEdges, setNodes, settle, withCurrent],
   );
 
   const selectedContainer = useCallback(
@@ -521,7 +554,12 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
     const maxX = Math.max(...boxes.map((b) => b.x + b.w)) + PAD;
     const maxY = Math.max(...boxes.map((b) => b.y + b.h)) + PAD;
     const id = `beat-${Date.now().toString(36)}`;
-    const container = beat(id, `Beat ${(nodes as RFNode[]).filter(isContainer).length + 1}`, { x: minX, y: minY }, { width: maxX - minX, height: maxY - minY });
+    const container = beat(
+      id,
+      `Beat ${(nodes as RFNode[]).filter(isContainer).length + 1}`,
+      { x: minX, y: minY },
+      { width: maxX - minX, height: maxY - minY },
+    );
     const chosenIds = new Set(chosen.map((n) => n.id));
     const next = [
       ...(nodes as RFNode[]).map((n) => {

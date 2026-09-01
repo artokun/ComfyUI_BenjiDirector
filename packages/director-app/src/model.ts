@@ -35,6 +35,8 @@ export interface SceneData extends BaseNodeData {
    * stays hidden. This is the flag that decides which.
    */
   promoted?: boolean;
+  /** Derived: an ancestor is a SUBGRAPH. Pinning is meaningless anywhere else. */
+  inSubgraph?: boolean;
   heading: string;
   action?: string;
   durationSec?: number;
@@ -47,6 +49,7 @@ export interface SceneData extends BaseNodeData {
 export interface AssetData extends BaseNodeData {
   kind: "asset";
   promoted?: boolean;
+  inSubgraph?: boolean;
   asset: "character" | "location" | "item";
   ports: PortInfo[];
 }
@@ -132,6 +135,11 @@ export const beat = (
   id,
   type: GROUP_TYPE,
   position,
+  // Size lives on the NODE, because that is what React Flow's NodeResizer writes to. The copy
+  // in `data` is only a fallback for graph-core's containment maths before anything is
+  // measured — rendering from `data` is what made resizing appear to do nothing.
+  width: size.width,
+  height: size.height,
   data: {
     kind: "beat",
     label,

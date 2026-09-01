@@ -42,6 +42,7 @@ export interface EditorActions {
   toggleCollapse(containerId: string): void;
   togglePin(nodeId: string): void;
   renameNode(nodeId: string, label: string): void;
+  convertContainer(containerId: string, to: "group" | "subgraph"): void;
 }
 export const ActionsContext = createContext<EditorActions | null>(null);
 const useActions = () => useContext(ActionsContext);
@@ -61,8 +62,21 @@ const dot = (type: DirectorPortType) => ({
  * read as a composed node — the few controls its author chose to surface — not as an opaque
  * box, and this is the only way to choose them.
  */
-function PinToolbar({ id, promoted, visible }: { id: string; promoted: boolean; visible: boolean }) {
+function PinToolbar({
+  id,
+  promoted,
+  visible,
+  inSubgraph,
+}: {
+  id: string;
+  promoted: boolean;
+  visible: boolean;
+  inSubgraph: boolean;
+}) {
   const actions = useActions();
+  // Outside a subgraph there is no collapsed face for a pin to put anything on, so offering
+  // one would be a control that silently does nothing.
+  if (!inSubgraph) return null;
   return (
     <NodeToolbar isVisible={visible} position={Position.Top} className="bd-nodebar">
       <button
@@ -90,7 +104,7 @@ export function SceneNode({ id, data, selected }: NodeProps) {
   const outs = d.ports.filter((p) => !p.isInput);
   return (
     <div className={`bd-node bd-scene${selected ? " is-selected" : ""}${d.promoted ? " is-promoted" : ""}`}>
-      <PinToolbar id={id} promoted={!!d.promoted} visible={!!selected} />
+      <PinToolbar id={id} promoted={!!d.promoted} visible={!!selected} inSubgraph={!!d.inSubgraph} />
       <div className="bd-node-title">{d.heading}</div>
       {d.videoPath ? <div className="bd-badge">rendered</div> : null}
       <div className="bd-ports">
@@ -117,7 +131,7 @@ export function AssetNode({ id, data, selected }: NodeProps) {
   const icon = d.asset === "character" ? "🧍" : d.asset === "location" ? "🏙️" : "🎒";
   return (
     <div className={`bd-node bd-asset${selected ? " is-selected" : ""}${d.promoted ? " is-promoted" : ""}`}>
-      <PinToolbar id={id} promoted={!!d.promoted} visible={!!selected} />
+      <PinToolbar id={id} promoted={!!d.promoted} visible={!!selected} inSubgraph={!!d.inSubgraph} />
       <div className="bd-node-title">
         <span className="bd-icon">{icon}</span>
         {d.label}
@@ -177,12 +191,71 @@ function EditableTitle({ id, label }: { id: string; label: string }) {
   );
 }
 
+/**
+ * A container's own toolbar — how you convert it, without hunting for the right button in the
+ * pane toolbar and hoping the right thing is selected.
+ */
+function ContainerToolbar({
+  id,
+  isSubgraph,
+  collapsed,
+  visible,
+}: {
+  id: string;
+  isSubgraph: boolean;
+  collapsed?: boolean;
+  visible: boolean;
+}) {
+  const actions = useActions();
+  return (
+    <NodeToolbar isVisible={visible} position={Position.Top} className="bd-nodebar">
+      <span className="bd-nodebar-kind">{isSubgraph ? "SUBGRAPH" : "GROUP"}</span>
+      <button
+        type="button"
+        className={`bd-tbtn${!isSubgraph ? " is-on" : ""}`}
+        title="Plain group — a box you drag scenes into"
+        onClick={(e) => {
+          e.stopPropagation();
+          actions?.convertContainer(id, "group");
+        }}
+      >
+        Group
+      </button>
+      <button
+        type="button"
+        className={`bd-tbtn${isSubgraph ? " is-on" : ""}`}
+        title="Subgraph — expose its crossings as rails"
+        onClick={(e) => {
+          e.stopPropagation();
+          actions?.convertContainer(id, "subgraph");
+        }}
+      >
+        Subgraph
+      </button>
+      {isSubgraph ? (
+        <button
+          type="button"
+          className="bd-tbtn"
+          title={collapsed ? "Expand" : "Collapse to one card"}
+          onClick={(e) => {
+            e.stopPropagation();
+            actions?.toggleCollapse(id);
+          }}
+        >
+          {collapsed ? "Expand" : "Collapse"}
+        </button>
+      ) : null}
+    </NodeToolbar>
+  );
+}
+
 /** An un-promoted Beat: a box you drag scenes into. No rails yet, by definition. */
 export function GroupNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as BeatData;
   return (
-    <div className={`bd-group${selected ? " is-selected" : ""}`} style={{ width: d.width, height: d.height }}>
+    <div className={`bd-group${selected ? " is-selected" : ""}`} style={{ width: "100%", height: "100%" }}>
       <NodeResizer minWidth={280} minHeight={200} isVisible={!!selected} color="#c084fc" />
+      <ContainerToolbar id={id} isSubgraph={false} visible={!!selected} />
       <div className="bd-group-title">
         🎞️ <EditableTitle id={id} label={d.label} />
         <span className="bd-hint">group — make it a subgraph to expose its edges</span>
@@ -350,6 +423,7 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
   if (collapsed) {
     return (
       <div className={`bd-collapsed${selected ? " is-selected" : ""}`}>
+        <ContainerToolbar id={id} isSubgraph collapsed visible={!!selected} />
         <div className="bd-collapsed-head">
           {caret}
           <span className="bd-collapsed-title">
@@ -382,9 +456,10 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
   return (
     <div
       className={`bd-group bd-subgraph${selected ? " is-selected" : ""}`}
-      style={{ width: d.width, height: d.height }}
+      style={{ width: "100%", height: "100%" }}
     >
       <NodeResizer minWidth={320} minHeight={220} isVisible={!!selected} color="#c084fc" />
+      <ContainerToolbar id={id} isSubgraph collapsed={false} visible={!!selected} />
       <div className="bd-group-title">
         {caret}
         🎞️ <EditableTitle id={id} label={d.label} />

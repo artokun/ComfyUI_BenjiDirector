@@ -103,6 +103,9 @@ export interface GraphNode<D = BaseNodeData> {
   type?: string;
   position: { x: number; y: number };
   parentId?: string;
+  /** User-set dimensions. React Flow's resizer writes these; they beat the data fallback. */
+  width?: number;
+  height?: number;
   measured?: { width?: number; height?: number };
   data: D;
 }
