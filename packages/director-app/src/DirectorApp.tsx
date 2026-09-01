@@ -46,6 +46,7 @@ import {
 import { CalliopeClient, probe, resolveConfig, type ReachabilityState, type Schemas } from "@benjidirector/calliope-client";
 import { calId, calliopeRef, projectToGraph } from "./calliope-bind.js";
 import { applyIntents, diffForCalliope } from "./calliope-sync.js";
+import { applyTopology, captureTopology, loadTopology, saveTopology, type RailLabels } from "./topology.js";
 import { ActionsContext, type EditorActions } from "./actions.js";
 import {
   blueprintIdFromName,
@@ -343,7 +344,7 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
 
   /** Bring the graph back to a consistent state. Order is not interchangeable. */
   const settle = useCallback(
-    (ns: RFNode[], es: Edge[], opts: { reparent?: boolean; sync?: boolean; prev?: { nodes: RFNode[]; edges: Edge[] } } = {}) => {
+    (ns: RFNode[], es: Edge[], opts: { reparent?: boolean; sync?: boolean; prev?: { nodes: RFNode[]; edges: Edge[] }; railLabels?: RailLabels } = {}) => {
       // settle receives the arrays a caller has ALREADY mutated, so it is the wrong place to
       // snapshot for undo — that recorded the post-change state and made every undo a no-op.
       let core = asCore(ns);
@@ -355,6 +356,18 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
         const out = reconcileBoundary(n.id, core, coreEdges, directorHost);
         core = out.nodes;
         coreEdges = out.edges;
+      }
+      // Rail labels from the topology sidecar: applied once the rails exist. A rail that is
+      // not in the map keeps the label reconcile gave it.
+      if (opts.railLabels) {
+        const labels = opts.railLabels;
+        core = core.map((n) => {
+          const saved = labels[n.id];
+          if (!saved || n.type !== SUBGRAPH_TYPE) return n;
+          const d = n.data as BeatData;
+          const relabel = (ports: BeatData["promotedIn"]) => ports.map((p) => (saved[p.id] ? { ...p, label: saved[p.id] } : p));
+          return { ...n, data: { ...d, promotedIn: relabel(d.promotedIn), promotedOut: relabel(d.promotedOut) } } as GraphNode<DirectorData>;
+        });
       }
       const done = decorate(asRF(core), asRFEdges(coreEdges));
       // Write-back: what this settle changed about Calliope-backed scenes. Diffed against the
@@ -486,6 +499,14 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
 
   // A drag already landed in state before we see it, so recording it would undo to the same
   // place. Undo covers structural edits, not raw node moves.
+  // Topology sidecar: remember the loaded project's Beat-level state whenever it changes.
+  // Debounced so a drag writes once, and keyed by project so two films never share a layout.
+  useEffect(() => {
+    if (loadedProject === null) return;
+    const t = setTimeout(() => saveTopology(loadedProject, captureTopology(asCore(nodes as RFNode[]))), 300);
+    return () => clearTimeout(t);
+  }, [nodes, loadedProject]);
+
   /** The graph as it stood when a drag began — the write-back baseline, see settle(). */
   const dragBaseline = useRef<{ nodes: RFNode[]; edges: Edge[] } | null>(null);
   const onNodeDragStart = useCallback(() => {
@@ -525,11 +546,13 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
         settingsCache.current = new Map(scenesRes.scenes.map((sc) => [sc.id, sc.video_settings ?? {}]));
         setSyncState("idle");
         const g = projectToGraph({ story, scenes: scenesRes.scenes });
-        const done = decorate(asRF(g.nodes as GraphNode<DirectorData>[]), asRFEdges(g.edges));
+        // Beat-level topology (subgraph-ness, collapse, colour, box, rail labels) lives in the
+        // local sidecar; a missing one costs a colour scheme, never a wire.
+        const laid = applyTopology(g.nodes as GraphNode<DirectorData>[], g.edges, loadTopology(projectId), directorHost);
         history.current = [];
         future.current = [];
-        setNodes(sortParentsFirst(asCore(done.nodes)) as unknown as RFNode[]);
-        setEdges(done.edges);
+        loadedProjectRef.current = projectId;
+        settle(asRF(sortParentsFirst(laid.nodes)), asRFEdges(laid.edges), { sync: false, railLabels: laid.railLabels });
         setLoadedProject(projectId);
         setNote(`loaded “${story.project.title}” — ${story.beats.length} beats, ${scenesRes.scenes.length} scenes, ~${scenesRes.estimated_duration_sec}s`);
       } catch (err) {
