@@ -1,0 +1,34 @@
+---
+title: "1 · The shape of it — side by side in one ComfyUI tab"
+---
+%%{init: {"theme":"dark","themeVariables":{"fontSize":"17px","fontFamily":"Inter, Segoe UI, sans-serif"},"flowchart":{"curve":"basis","nodeSpacing":55,"rankSpacing":55}}}%%
+flowchart TB
+
+  LLM(["🤖 <b>Any LLM</b> &nbsp;·&nbsp; Claude · GPT · Gemini · <i>or fully local</i>"])
+  ORCH["<b>comfyui-mcp</b> orchestrator"]
+
+  CHAT["💬 <b>Agent chat</b><br/><i>stays visible &amp; usable</i>"]
+  DIR["🎬 <b>Director</b> pane<br/><i>nested scene graph</i>"]
+
+  CAL["<b>Calliope</b> &nbsp;<i>@benjiyaya</i><br/>FastAPI :8247 · SQLite"]
+  COMFY["<b>ComfyUI</b> :8188<br/><i>Minimax H3 · LTX 2.3 · Wan</i>"]
+
+  LLM  ==>|"&nbsp;tools&nbsp;"| ORCH
+  ORCH ==>|"&nbsp;chat frames&nbsp;"| CHAT
+  ORCH ==>|"&nbsp;mounted tools · <tt>ws bridge</tt>&nbsp;"| DIR
+  DIR  ==>|"&nbsp;REST · SSE&nbsp;"| CAL
+  CAL  ==>|"&nbsp;prompt · history · clips&nbsp;"| COMFY
+
+  classDef llm   fill:#7c3aed,stroke:#a78bfa,color:#fff,stroke-width:2px
+  classDef ours  fill:#1e3a5f,stroke:#3b82f6,color:#e0f2fe,stroke-width:2px
+  classDef benji fill:#4a2a1a,stroke:#f59e0b,color:#fef3c7,stroke-width:2px
+  classDef comfy fill:#14532d,stroke:#22c55e,color:#dcfce7,stroke-width:2px
+  classDef star  fill:#3b1d5e,stroke:#c084fc,color:#f3e8ff,stroke-width:3px
+
+  class LLM llm
+  class CHAT,ORCH ours
+  class DIR star
+  class CAL benji
+  class COMFY comfy
+
+  linkStyle default stroke:#9ca3af

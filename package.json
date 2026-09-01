@@ -1,0 +1,29 @@
+{
+  "name": "benjidirector",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Agent-driven long-form video editor — a module for the ComfyUI MCP agent panel, backed by Calliope.",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/artokun/ComfyUI_BenjiDirector" },
+  "engines": { "node": ">=22" },
+  "workspaces": [
+    "packages/graph-core",
+    "packages/calliope-client",
+    "packages/director-tools",
+    "packages/director-app"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --build",
+    "lint": "npm run typecheck && npm run test",
+    "sync:panel": "node scripts/sync-to-panel.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
+  }
+}

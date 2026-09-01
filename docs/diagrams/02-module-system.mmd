@@ -1,0 +1,38 @@
+---
+title: "2 · Director is module #1 of a module system"
+---
+%%{init: {"theme":"dark","themeVariables":{"fontSize":"17px","fontFamily":"Inter, Segoe UI, sans-serif"},"flowchart":{"curve":"basis","nodeSpacing":45,"rankSpacing":55}}}%%
+flowchart TB
+
+  SHELL["<b>Side-panel shell</b><br/><i>— already exists —</i><br/>overlay · tab bar · search · dock · close<br/><i>CivitAI, Apps, Training and RunPod already ride this</i>"]
+
+  REG["<b>Module registry</b><br/><i>— the new bit —</i><br/><i>one manifest entry per module</i>"]
+
+  M1["🎬 <b>Director</b><br/><i>module #1</i>"]
+  M2["📺 <b>YouTuber</b><br/><i>module #2, later</i><br/>videos · Patreon<br/>free workflows"]
+  M3["➕ <i>yours?</i>"]
+
+  PANE["surface: <b>pane</b><br/><i>a tab in the panel</i>"]
+  NODE["surface: <b>node</b><br/><i>a face inside the graph</i><br/><i>— designed now, built next</i>"]
+
+  SHELL --> REG
+  REG ==> M1
+  REG ==> M2
+  REG -.-> M3
+  M1 ==> PANE
+  M1 -.-> NODE
+  M2 -.-> PANE
+  M2 -.-> NODE
+
+  classDef ours   fill:#1e3a5f,stroke:#3b82f6,color:#e0f2fe,stroke-width:2px
+  classDef star   fill:#3b1d5e,stroke:#c084fc,color:#f3e8ff,stroke-width:3px
+  classDef future fill:#2a2a35,stroke:#6b7280,color:#9ca3af,stroke-dasharray:5 4
+  classDef surf   fill:#0f3d3e,stroke:#2dd4bf,color:#ccfbf1,stroke-width:2px
+
+  class SHELL,REG ours
+  class M1 star
+  class M2,M3 future
+  class PANE surf
+  class NODE future
+
+  linkStyle default stroke:#9ca3af

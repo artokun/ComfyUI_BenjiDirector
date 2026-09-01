@@ -1,0 +1,33 @@
+---
+title: "4 · Tools exist only while the pane is open"
+---
+%%{init: {"theme":"dark","themeVariables":{"fontSize":"16px","fontFamily":"Inter, Segoe UI, sans-serif"}}}%%
+sequenceDiagram
+    autonumber
+    actor You
+    participant Panel as Director pane
+    participant Orch as comfyui-mcp
+    participant LLM as The agent
+
+    Note over Orch,LLM: idle — the agent sees only the entry point
+
+    You->>Panel: open the Director tab
+    Panel->>Orch: pane_state { open: true }
+    Orch->>Orch: mount the director tool group
+    Orch--)LLM: notifications/tools/list_changed
+    LLM->>Orch: tools/list
+    Orch-->>LLM: + graph · link · subgraph · project · story · render
+
+    Note over You,LLM: you edit by hand, the agent edits by tool — same graph, same time
+
+    LLM->>Panel: promote Beat to subgraph
+    Panel-->>LLM: ok
+    You->>Panel: drag a scene in
+    Panel->>Panel: rails reconcile, labels survive
+
+    You->>Panel: close the tab
+    Panel->>Orch: pane_state { open: false }
+    Orch->>Orch: unmount the group
+    Orch--)LLM: notifications/tools/list_changed
+
+    Note over Orch,LLM: back to idle — no dead tools, no stale surface

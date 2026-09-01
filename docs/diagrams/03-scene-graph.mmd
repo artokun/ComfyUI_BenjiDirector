@@ -1,0 +1,42 @@
+---
+title: "3 · The nested scene graph — continuity becomes a wire"
+---
+%%{init: {"theme":"dark","themeVariables":{"fontSize":"16px","fontFamily":"Inter, Segoe UI, sans-serif","clusterBkg":"#241a33","clusterBorder":"#c084fc"},"flowchart":{"curve":"basis","nodeSpacing":40,"rankSpacing":50}}}%%
+flowchart TB
+
+  CHAR["🧍 <b>Character</b><br/><i>consistency prompt<br/>+ portrait</i>"]
+  LOC["🏙️ <b>Location</b><br/><i>env image</i>"]
+
+  subgraph BEAT["🎞️ &nbsp;<b>Beat</b> — a subgraph you can collapse to one card"]
+    direction TB
+    S1["<b>Scene 1</b><br/><i>heading · action · dialog</i>"]
+    S2["<b>Scene 2</b>"]
+    S3["<b>Scene 3</b>"]
+    S1 ==>|"&nbsp;last frame&nbsp;"| S2
+    S2 ==>|"&nbsp;last frame&nbsp;"| S3
+  end
+
+  OUT["🎬 <b>Beat video</b><br/><i>clips, in order</i>"]
+  NEXTBEAT["🎞️ <b>next Beat</b><br/><i>picks up the thread</i>"]
+
+  CHAR ==>|"&nbsp;promoted rail&nbsp;"| BEAT
+  LOC  ==>|"&nbsp;promoted rail&nbsp;"| BEAT
+  BEAT ==> OUT
+  BEAT ==>|"&nbsp;last frame out&nbsp;"| NEXTBEAT
+
+  NOTE["<i>Rails are boundary ports promoted from the scenes inside.<br/>Drag a scene in or out and the rails reconcile themselves —<br/>your labels and ordering survive, because port ids are derived,<br/>never minted.</i>"]
+  BEAT -.- NOTE
+
+  classDef asset  fill:#4a2a1a,stroke:#f59e0b,color:#fef3c7,stroke-width:2px
+  classDef scene  fill:#1e3a5f,stroke:#3b82f6,color:#e0f2fe,stroke-width:2px
+  classDef out    fill:#14532d,stroke:#22c55e,color:#dcfce7,stroke-width:2px
+  classDef future fill:#2a2a35,stroke:#6b7280,color:#9ca3af,stroke-dasharray:5 4
+  classDef note   fill:#26262e,stroke:#4b5563,color:#9ca3af
+
+  class CHAR,LOC asset
+  class S1,S2,S3 scene
+  class OUT out
+  class NEXTBEAT future
+  class NOTE note
+
+  linkStyle default stroke:#9ca3af

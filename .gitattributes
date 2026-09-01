@@ -1,0 +1,4 @@
+# Normalise to LF in the repo. Benji is on a different platform to this checkout, and a
+# repo that disagrees with itself about line endings turns every diff into noise.
+* text=auto eol=lf
+*.png binary
