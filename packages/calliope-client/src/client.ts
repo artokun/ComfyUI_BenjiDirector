@@ -20,7 +20,11 @@ import type { CalliopeConfig } from "./index.js";
 
 export type Schemas = components["schemas"];
 
-/** Rows Calliope returns as `dict[str, Any]`. Shapes observed in `db.py`, not in the spec. */
+/**
+ * Rows Calliope returns as `dict[str, Any]` — shapes OBSERVED on the wire against 1.2.1
+ * (a seeded project, 2026-09-01), not read from the spec, which types them as `object`.
+ * Note `video_settings` arrives already parsed; the `_json` column never crosses the wire.
+ */
 export interface SceneRow {
   id: number;
   project_id: number;
@@ -34,14 +38,24 @@ export interface SceneRow {
   env_image_path: string | null;
   location_id: number | null;
   video_path: string | null;
-  video_settings_json: string | null;
-  character_ids?: number[];
+  chain_from_prev: number | boolean;
+  created_at?: string;
+  characters?: Array<{ id: number; name: string; role: string | null; portrait_path: string | null; sheet_path: string | null }>;
+  character_ids: number[];
+  video_settings: Record<string, unknown> | null;
 }
-export interface BeatRow { id: number; project_id: number; order_index: number; title: string; summary: string | null }
-export interface CharacterRow { id: number; project_id: number; name: string; description: string | null; portrait_path: string | null; sheet_path: string | null; consistency_prompt: string | null }
-export interface LocationRow { id: number; project_id: number; name: string; description: string | null; env_image_path?: string | null }
-export interface ItemRow { id: number; project_id: number; name: string; description: string | null }
-export interface StoryBundle { beats: BeatRow[]; characters: CharacterRow[]; locations: LocationRow[]; items: ItemRow[]; [k: string]: unknown }
+export interface ScenesResponse { scenes: SceneRow[]; estimated_duration_sec: number }
+export interface BeatRow { id: number; order_index: number; title: string; description: string | null }
+export interface CharacterRow { id: number; name: string; role: string | null; age: string | null; appearance: string | null; personality: string | null; portrait_path: string | null; sheet_path: string | null; consistency_prompt: string | null }
+export interface LocationRow { id: number; name: string; description: string | null; reference_image_path: string | null; consistency_prompt: string | null }
+export interface ItemRow { id: number; name: string; description: string | null; [k: string]: unknown }
+export interface StoryBundle {
+  project: { id: number; title: string; idea: string | null; genre: string | null; tone: string | null; target_duration: string | null; status: string };
+  beats: BeatRow[];
+  characters: CharacterRow[];
+  locations: LocationRow[];
+  items: ItemRow[];
+}
 export interface JobRow { id: number; kind: string; status: string; workflow_id: number | null; error: string | null; retry_count: number; [k: string]: unknown }
 export interface WorkflowRow { id: number; name: string; kind: "image" | "video"; is_enabled: boolean; prompt_profile: string; [k: string]: unknown }
 
@@ -237,7 +251,7 @@ export class CalliopeClient {
 
   // ── scenes ───────────────────────────────────────────────────────────────────
   readonly scenes = {
-    list: (project_id: number) => this.request<SceneRow[]>("scenesList", { params: { project_id } }),
+    list: (project_id: number) => this.request<ScenesResponse>("scenesList", { params: { project_id } }),
     create: (project_id: number, body: Schemas["SceneCreate"]) => this.request<SceneRow>("sceneCreate", { params: { project_id }, body }),
     patch: (project_id: number, scene_id: number, body: Schemas["SceneUpdate"]) => this.request<SceneRow>("scenePatch", { params: { project_id, scene_id }, body }),
     delete: (project_id: number, scene_id: number) => this.request<unknown>("sceneDelete", { params: { project_id, scene_id } }),
@@ -287,13 +301,7 @@ export class CalliopeClient {
    */
   async promptDraft(project_id: number, scene: SceneRow, prompt: string): Promise<SceneRow> {
     const based_on = await scenePromptHash(scene);
-    let settings: Record<string, unknown> = {};
-    try {
-      settings = scene.video_settings_json ? (JSON.parse(scene.video_settings_json) as Record<string, unknown>) : {};
-    } catch {
-      settings = {};
-    }
-    const video_settings = { ...settings, prompt_draft: prompt, prompt_draft_meta: { based_on, authored_by: "benjidirector" } };
+    const video_settings = { ...(scene.video_settings ?? {}), prompt_draft: prompt, prompt_draft_meta: { based_on, authored_by: "benjidirector" } };
     return this.scenes.patch(project_id, scene.id, { video_settings } as unknown as Schemas["SceneUpdate"]);
   }
 }
