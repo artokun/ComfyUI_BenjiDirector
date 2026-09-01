@@ -24,7 +24,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc --build && npm run typecheck -w @benjidirector/director-app",
     "lint": "npm run typecheck && npm run test",
-    "sync:panel": "node scripts/sync-to-panel.mjs"
+    "sync:panel": "node scripts/sync-to-panel.mjs",
+    "calliope:up": "node scripts/calliope-up.mjs",
+    "calliope:check": "node scripts/calliope-up.mjs --check"
   },
   "devDependencies": {
     "@types/node": "22.10.2",

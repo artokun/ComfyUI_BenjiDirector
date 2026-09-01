@@ -75,6 +75,21 @@ stripped out. Its one load-bearing idea is that **boundary port ids are derived,
 minted** — `${containerId}::${childPortId}` — which is what makes reconciling a boundary
 idempotent, and what lets your rail labels and ordering survive dragging a scene in or out.
 
+## Run Calliope
+
+One command, idempotent, pinned to the Calliope commit this module was validated against:
+
+```bash
+npm run calliope:up
+```
+
+It clones Calliope into `~/.comfyui-mcp/calliope` (or `--dir <existing checkout>`), makes
+the venv, installs the backend, starts it detached on `127.0.0.1:8247`, and waits for
+`/api/health`. If Calliope already answers on that port it says so and starts nothing.
+`npm run calliope:check` only probes; `--stop` stops what it started. Needs git and
+Python 3.11+; ffmpeg only for exporting a film. No LLM endpoint is needed — the agent in
+the panel is the only model in the loop.
+
 ## Develop
 
 ```bash
