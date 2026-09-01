@@ -45,7 +45,8 @@ import {
   type GraphNode,
 } from "@benjidirector/graph-core";
 import { CalliopeClient, probe, resolveConfig, type ReachabilityState, type Schemas } from "@benjidirector/calliope-client";
-import { projectToGraph } from "./calliope-bind.js";
+import { calId, projectToGraph } from "./calliope-bind.js";
+import { applyIntents, diffForCalliope } from "./calliope-sync.js";
 import { ActionsContext, type EditorActions } from "./actions.js";
 import {
   blueprintIdFromName,
@@ -256,6 +257,11 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
   const [blueprints, setBlueprints] = useState<Record<string, Blueprint>>(() => loadBlueprints());
   const [projects, setProjects] = useState<Schemas["Project"][]>([]);
   const [loadedProject, setLoadedProject] = useState<number | null>(null);
+  const loadedProjectRef = useRef<number | null>(null);
+  loadedProjectRef.current = loadedProject;
+  /** Each loaded scene's current video_settings, so a director write merges rather than clobbers. */
+  const settingsCache = useRef(new Map<number, Record<string, unknown>>());
+  const [syncState, setSyncState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
@@ -338,7 +344,7 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
 
   /** Bring the graph back to a consistent state. Order is not interchangeable. */
   const settle = useCallback(
-    (ns: RFNode[], es: Edge[], opts: { reparent?: boolean } = {}) => {
+    (ns: RFNode[], es: Edge[], opts: { reparent?: boolean; sync?: boolean; prev?: { nodes: RFNode[]; edges: Edge[] } } = {}) => {
       // settle receives the arrays a caller has ALREADY mutated, so it is the wrong place to
       // snapshot for undo — that recorded the post-change state and made every undo a no-op.
       let core = asCore(ns);
@@ -352,10 +358,47 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
         coreEdges = out.edges;
       }
       const done = decorate(asRF(core), asRFEdges(coreEdges));
+      // Write-back: what this settle changed about Calliope-backed scenes. Diffed against the
+      // graph as it stood BEFORE (the refs), so a change is written once, not on every render.
+      const pid = loadedProjectRef.current;
+      if (pid !== null && opts.sync !== false) {
+        const prev = opts.prev ?? { nodes: nodesRef.current as RFNode[], edges: edgesRef.current };
+        const intents = diffForCalliope(
+          { nodes: asCore(prev.nodes), edges: asCoreEdges(prev.edges) },
+          { nodes: asCore(done.nodes), edges: asCoreEdges(done.edges) },
+        );
+        if (intents.length) {
+          setSyncState("saving");
+          void applyIntents(client, pid, intents, settingsCache.current).then((r) => {
+            if (!r.failed.length) {
+              setSyncState("saved");
+              return;
+            }
+            setSyncState("error");
+            setNote(`Calliope did not keep ${r.failed.length} change(s): ${r.failed[0]?.error ?? ""}`);
+            // A Beat move Calliope would not keep is snapped back where it was, so the canvas
+            // never shows a topology the film does not have — a reload would have reverted it
+            // silently, which is the worse surprise.
+            const snapBack = new Set(r.failed.filter((f) => f.field === "beat_id").map((f) => calId.scene(f.sceneId)));
+            if (!snapBack.size) return;
+            const prevById = new Map(prev.nodes.map((n) => [n.id, n] as const));
+            settleRef.current(
+              (nodesRef.current as RFNode[]).map((n) => {
+                const was = snapBack.has(n.id) ? prevById.get(n.id) : undefined;
+                return was ? ({ ...n, parentId: was.parentId, position: was.position } as RFNode) : n;
+              }),
+              edgesRef.current,
+              // Synced on purpose: the same PATCH carried a position Calliope DID keep, so the
+              // snap-back writes the restored position (and the Beat it never left) back too.
+              { reparent: false },
+            );
+          });
+        }
+      }
       setNodes(done.nodes);
       setEdges(done.edges);
     },
-    [setEdges, setNodes],
+    [client, setEdges, setNodes],
   );
 
   const pushHistory = useCallback((ns: RFNode[], es: Edge[]) => {
@@ -444,7 +487,18 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
 
   // A drag already landed in state before we see it, so recording it would undo to the same
   // place. Undo covers structural edits, not raw node moves.
-  const onNodeDragStop = useCallback(() => withCurrent((ns, es) => settle(ns, es), { history: false }), [settle, withCurrent]);
+  /** The graph as it stood when a drag began — the write-back baseline, see settle(). */
+  const dragBaseline = useRef<{ nodes: RFNode[]; edges: Edge[] } | null>(null);
+  const onNodeDragStart = useCallback(() => {
+    dragBaseline.current = { nodes: nodesRef.current as RFNode[], edges: edgesRef.current };
+  }, []);
+  const settleRef = useRef(settle);
+  settleRef.current = settle;
+  const onNodeDragStop = useCallback(() => {
+    const prev = dragBaseline.current ?? undefined;
+    dragBaseline.current = null;
+    withCurrent((ns, es) => settle(ns, es, { prev }), { history: false });
+  }, [settle, withCurrent]);
 
   /**
    * Load a Calliope project onto the canvas.
@@ -469,6 +523,8 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
       }
       try {
         const [story, scenesRes] = await Promise.all([client.story.get(projectId), client.scenes.list(projectId)]);
+        settingsCache.current = new Map(scenesRes.scenes.map((sc) => [sc.id, sc.video_settings ?? {}]));
+        setSyncState("idle");
         const g = projectToGraph({ story, scenes: scenesRes.scenes });
         const done = decorate(asRF(g.nodes as GraphNode<DirectorData>[]), asRFEdges(g.edges));
         history.current = [];
@@ -1314,6 +1370,11 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
                   ))}
                 </select>
               ) : null}
+              {loadedProject !== null ? (
+                <span className={`bd-sync is-${syncState}`} title="Write-back to Calliope">
+                  {syncState === "saving" ? "saving…" : syncState === "saved" ? "saved" : syncState === "error" ? "save failed" : "synced"}
+                </span>
+              ) : null}
               <span className={`bd-status ${status?.reachable ? "is-up" : "is-down"}`}>
                 {status === null ? "checking Calliope…" : status.reachable ? `Calliope ${status.health.version ?? "ok"}` : `Calliope unreachable — ${status.reason}`}
               </span>
@@ -1325,6 +1386,7 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
+                onNodeDragStart={onNodeDragStart}
                 onNodeDragStop={onNodeDragStop}
                 onConnect={onConnect}
                 onConnectStart={onConnectStart}

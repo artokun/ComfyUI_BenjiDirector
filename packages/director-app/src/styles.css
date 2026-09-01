@@ -336,3 +336,19 @@
   font: inherit; font-size: 12px; padding: .22rem .4rem; max-width: 220px;
 }
 .bd-project:focus { outline: none; border-color: var(--bd-accent); }
+
+.bd-sync { font-size: 11px; color: var(--bd-dim); padding: .2rem .45rem; border: 1px solid var(--bd-line); border-radius: 999px; }
+.bd-sync.is-saving { color: #fde68a; border-color: #4a3f10; }
+.bd-sync.is-saved { color: #86efac; border-color: #14532d; }
+.bd-sync.is-error { color: #fca5a5; border-color: #4a1f1f; }
+
+/* A container's empty body is transparent to the pointer — as with a LiteGraph group, you pick
+   it up by its title bar — so a wire that crosses the box stays hoverable and clickable. Its
+   title, rails and resize handles stay solid, and a collapsed card is all face, so it does too. */
+.react-flow__node-groupbox,
+.react-flow__node-subgraph,
+.react-flow__node-groupbox > .bd-group,
+.react-flow__node-subgraph > .bd-subgraph { pointer-events: none; }
+.react-flow__node-groupbox > .bd-group > *,
+.react-flow__node-subgraph > .bd-subgraph > *,
+.react-flow__node-subgraph > .bd-collapsed { pointer-events: auto; }
