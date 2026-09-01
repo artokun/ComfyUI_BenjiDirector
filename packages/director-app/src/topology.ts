@@ -47,13 +47,18 @@ export function captureTopology(nodes: readonly GraphNode<DirectorData>[]): Proj
     const d = n.data as BeatData;
     const railLabels: Record<string, string> = {};
     for (const p of [...(d.promotedIn ?? []), ...(d.promotedOut ?? [])]) railLabels[p.id] = p.label;
+    // `width`/`height` always describe the EXPANDED box. While collapsed the node's own size
+    // is the card's (or nothing, when it sizes itself), and the expanded box is stashed in
+    // data by toggleCollapse — so read it from there.
+    const expandedW = d.collapsed ? d.expandedWidth : n.width;
+    const expandedH = d.collapsed ? d.expandedHeight : n.height;
     beats[n.id] = {
       subgraph: n.type === SUBGRAPH_TYPE,
       ...(d.collapsed ? { collapsed: true } : {}),
       ...(d.color ? { color: d.color } : {}),
       position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },
-      ...(n.width ? { width: n.width } : {}),
-      ...(n.height ? { height: n.height } : {}),
+      ...(expandedW ? { width: expandedW } : {}),
+      ...(expandedH ? { height: expandedH } : {}),
       ...(d.expandedWidth ? { expandedWidth: d.expandedWidth } : {}),
       ...(d.expandedHeight ? { expandedHeight: d.expandedHeight } : {}),
       ...(d.collapsedWidth ? { collapsedWidth: d.collapsedWidth } : {}),
@@ -81,17 +86,22 @@ export function applyTopology(
     const t = topo.beats[n.id];
     if (!t || !isBeatRow(n)) return n;
     const d = n.data as BeatData;
+    // Collapsed: the node's size is the collapsed card's — an explicit one only if the user
+    // resized it while collapsed, otherwise none so the card sizes itself — and the expanded
+    // box waits in data for the next expand. Expanded: the node's size is the box.
+    const { width: _w, height: _h, ...bare } = n;
+    const sized = t.collapsed
+      ? { ...bare, ...(t.collapsedWidth ? { width: t.collapsedWidth } : {}), ...(t.collapsedHeight ? { height: t.collapsedHeight } : {}) }
+      : { ...bare, ...(t.width ? { width: t.width } : {}), ...(t.height ? { height: t.height } : {}) };
     return {
-      ...n,
+      ...sized,
       position: t.position,
-      ...(t.width ? { width: t.width } : {}),
-      ...(t.height ? { height: t.height } : {}),
       data: {
         ...d,
         ...(t.color ? { color: t.color } : {}),
         ...(t.collapsed ? { collapsed: true } : {}),
-        ...(t.expandedWidth ? { expandedWidth: t.expandedWidth } : {}),
-        ...(t.expandedHeight ? { expandedHeight: t.expandedHeight } : {}),
+        ...(t.collapsed && t.width ? { expandedWidth: t.width } : t.expandedWidth ? { expandedWidth: t.expandedWidth } : {}),
+        ...(t.collapsed && t.height ? { expandedHeight: t.height } : t.expandedHeight ? { expandedHeight: t.expandedHeight } : {}),
         ...(t.collapsedWidth ? { collapsedWidth: t.collapsedWidth } : {}),
         ...(t.collapsedHeight ? { collapsedHeight: t.collapsedHeight } : {}),
       },

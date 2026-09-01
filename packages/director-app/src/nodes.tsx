@@ -383,7 +383,10 @@ function Rail({
   const innerType = side === "in" ? "source" : "target";
 
   const chars = railChars(ports, editing?.id ?? null, editing?.text ?? "");
-  const pillWidth = `calc(${chars}ch + 26px)`;
+  // A CONTENT width (the stylesheet sets content-box): uppercase tracked caps run wider than
+  // `ch` (the width of "0"), so budget 1.18ch per character plus a little air. A clipped rail
+  // label is a wrong label.
+  const pillWidth = `calc(${(chars * 1.18).toFixed(2)}ch + 8px)`;
 
   const commit = (bp: BoundaryPort, raw: string) => {
     const next = raw.trim();

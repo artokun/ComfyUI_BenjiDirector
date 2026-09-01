@@ -62,6 +62,27 @@ describe("topology sidecar", () => {
     expect(again.nodes.find((n) => n.id === "cal-beat-1")!.type).toBe(GROUP_TYPE);
   });
 
+  it("a collapsed Beat is stored by its EXPANDED box and comes back sizing its own card", () => {
+    // Collapsed on the canvas: node size is the card's (auto → none), expanded box stashed in data.
+    const collapsed = { ...b1, width: undefined, height: undefined, data: { ...b1.data, collapsed: true, expandedWidth: 559, expandedHeight: 358 } } as N;
+    const topo = captureTopology([collapsed]);
+    expect(topo.beats["cal-beat-1"]).toMatchObject({ collapsed: true, width: 559, height: 358 });
+
+    const fresh = beat("cal-beat-1", "Beat 1", { x: 0, y: 0 }, { width: 460, height: 280 }); // projectToGraph's default box
+    const out = applyTopology([fresh], [], topo, directorHost).nodes[0]!;
+    expect(out.width).toBeUndefined();
+    expect(out.height).toBeUndefined();
+    expect((out.data as BeatData).collapsed).toBe(true);
+    expect((out.data as BeatData).expandedWidth).toBe(559);
+    expect((out.data as BeatData).expandedHeight).toBe(358);
+
+    // Resized while collapsed: that size is the card's and is applied as the node size.
+    const resized = { ...collapsed, width: 300, height: 120, data: { ...collapsed.data, collapsedWidth: 300, collapsedHeight: 120 } } as N;
+    const topo2 = captureTopology([resized]);
+    const out2 = applyTopology([fresh], [], topo2, directorHost).nodes[0]!;
+    expect([out2.width, out2.height]).toEqual([300, 120]);
+  });
+
   it("a sidecar naming a Beat that no longer exists is ignored, not applied to thin air", () => {
     const out = applyTopology([b1, s1], [], { version: 1, beats: { "cal-beat-9": { subgraph: true, position: { x: 1, y: 1 }, railLabels: {} } } }, directorHost);
     expect(out.nodes.map((n) => n.id)).toEqual(["cal-beat-1", "cal-sc-1"]);

@@ -253,6 +253,9 @@
   user-select: none;
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
   transition: filter 0.12s;
+  /* The host page is border-box (Tailwind preflight); the rail's shared width is a CONTENT
+     width, so say so, or the padding eats the label and it clips. */
+  box-sizing: content-box;
 }
 .bd-pill:hover { filter: brightness(1.18); }
 .bd-pill.is-drag-over { outline: 1px dashed var(--bd-accent-2); outline-offset: 2px; }
