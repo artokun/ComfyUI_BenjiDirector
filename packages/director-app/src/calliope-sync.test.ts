@@ -40,6 +40,18 @@ describe("diffForCalliope", () => {
     expect(diffForCalliope(wired, snap([b1, s1, s2]))).toEqual([{ sceneId: 2, chain_from_prev: false }]);
   });
 
+  it("a continuity wire from a scene that is not the one before in the cut does not set chain_from_prev", () => {
+    const o1 = { ...s1, data: { ...s1.data, orderIndex: 0 } } as N;
+    const o2 = { ...s2, data: { ...s2.data, orderIndex: 1 } } as N;
+    const o3 = scene("cal-sc-3", "SC-03", { x: 40, y: 380 }, { durationSec: 4, orderIndex: 2 }, "cal-beat-1");
+    // SC-01 → SC-03 skips SC-02: Calliope would still chain SC-03 from SC-02, so we do not claim it.
+    const skip = snap([b1, o1, o2, o3], [chain("cal-sc-1", "cal-sc-3")]);
+    expect(diffForCalliope(snap([b1, o1, o2, o3]), skip)).toEqual([]);
+    // SC-02 → SC-03 is consecutive and does.
+    const ok = snap([b1, o1, o2, o3], [chain("cal-sc-2", "cal-sc-3")]);
+    expect(diffForCalliope(snap([b1, o1, o2, o3]), ok)).toEqual([{ sceneId: 3, chain_from_prev: true }]);
+  });
+
   it("editing heading and duration on the collapsed face writes content fields", () => {
     const edited = { ...s1, data: { ...s1.data, heading: "SC-01 · Out", label: "SC-01 · Out", durationSec: 7 } } as N;
     expect(diffForCalliope(snap([b1, s1]), snap([b1, edited]))).toEqual([{ sceneId: 1, heading: "SC-01 · Out", duration_sec: 7 }]);

@@ -13,8 +13,10 @@ frontend. Calliope owns the content — projects, beats, scenes, characters, job
 owns the topology — what is nested in what, and which continuity rails cross which boundary.
 
 > **Status: working prototype, not yet released.** The editor runs live inside the ComfyUI
-> agent panel and the agent can drive it end to end; Calliope binding is next. See
-> `docs/diagrams/` for the approach and the sections below for what exists today.
+> agent panel, loads a Calliope project onto the canvas and writes edits back, and the
+> agent has ten tools that mount with the pane. Calliope bring-up (one install) is next.
+> See `docs/diagrams/` for the approach, `docs/agent-playbook.md` for how the agent is
+> meant to work a film, and the sections below for what exists today.
 >
 > Setup is a first-class goal, not an afterthought: the target is that a user installs the
 > panel and this works, without hand-assembling a Python venv to get there.
@@ -36,11 +38,26 @@ owns the topology — what is nested in what, and which continuity rails cross w
   whichever pane is showing.
 - **The algebra** (`packages/graph-core`): promote / dissolve / reconcile with derived boundary
   ids, 49 tests, mutation-checked.
+- **Calliope binding** (`calliope-bind.ts`, `calliope-sync.ts`, `topology.ts`): pick a
+  project and the canvas becomes it — Beats as containers, scenes parented by `beat_id`,
+  Character/Location refs and `chain_from_prev` as wires. Edits write back as a diff on
+  every settle: heading and duration to the row, a scene's Beat to `beat_id`, a continuity
+  wire to `chain_from_prev`, position and pin to `video_settings.director`. Every write is
+  checked against the row Calliope returns — a 200 is not evidence it landed — and a move
+  it would not keep is snapped back with the reason shown. Beat-level state Calliope cannot
+  store (subgraph-ness, collapse, colour, box, rail labels) lives in a per-project sidecar.
+- **The Calliope tools**: `panel_director_project` / `_story` / `_scene` / `_workflow` /
+  `_render` reach Calliope through the pane, which re-reads the project after a mutation and
+  MERGES it so an agent edit never costs the layout. This agent authors the story and the
+  prompts; Calliope's own model is never in the loop (`scene set_prompt` stamps the draft
+  against the scene's current text hash, `videos_generate` carries explicit prompts).
 
 ## What is next
 
-Binding the graph to Calliope's data (projects → beats → scenes) with the topology sidecar,
-then the five Calliope tools, then Calliope bring-up so the whole thing is one install.
+Calliope bring-up so the whole thing is one install; then the node context menu and a
+prompt-quality pass against Calliope's own templates. One upstream fix is prepared:
+Calliope 1.2.1's scene PATCH silently ignores an explicit `null`, so a scene cannot leave
+its Beat — the module detects and reverts that today, and the fix will go up as a PR.
 
 ## Layout
 

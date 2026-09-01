@@ -1090,7 +1090,20 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
     const types = handleTypes(nodesRef.current as RFNode[]);
     const a = types.get(c.sourceHandle ?? "");
     const b = types.get(c.targetHandle ?? "");
-    return !!a && a === b;
+    if (!a || a !== b) return false;
+    // Continuity between Calliope scenes is `chain_from_prev` — "from the scene before this
+    // one in the cut" — so a LAST FRAME → IN FRAME wire is only honest between consecutive
+    // scenes. Refuse the others here, where the mouse and the agent both arrive.
+    if (c.sourceHandle?.endsWith(":out:LAST FRAME") && c.targetHandle?.endsWith(":in:IN FRAME")) {
+      const ns = nodesRef.current as RFNode[];
+      const src = ns.find((n) => n.id === c.source)?.data as SceneData | undefined;
+      const dst = ns.find((n) => n.id === c.target)?.data as SceneData | undefined;
+      if (typeof src?.orderIndex === "number" && typeof dst?.orderIndex === "number" && src.orderIndex !== dst.orderIndex - 1) {
+        setNote("continuity runs in cut order — reorder the scenes first, then wire the last frame");
+        return false;
+      }
+    }
+    return true;
   }, []);
 
   // ── the agent's entry point ────────────────────────────────────────────────────────

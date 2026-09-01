@@ -51,14 +51,30 @@ const beatIdOf = (parentId: string | undefined): number | null => {
   const ref = calliopeRef(parentId);
   return ref?.kind === "beat" ? ref.id : null;
 };
-/** Is this scene's IN FRAME fed by another Calliope scene's LAST FRAME (directly, or through a rail)? */
-function chainedFrom(sceneNodeId: string, edges: readonly GraphEdge[]): boolean {
+/**
+ * Is this scene's IN FRAME fed by the scene BEFORE it in the cut? That is what
+ * chain_from_prev means to Calliope, so a wire from any other scene does not count — the
+ * editor refuses such wires between Calliope scenes; if one is present anyway (order
+ * unknown, or a rail relay whose true source is the container) it is taken at face value.
+ */
+function chainedFrom(sceneNodeId: string, edges: readonly GraphEdge[], order: ReadonlyMap<string, number>): boolean {
   const target = `${sceneNodeId}:in:IN FRAME`;
-  // Through a rail the target handle is still the child's own port on the INNER relay edge,
-  // and its source is the container — either way, an edge terminating on this port means
-  // "fed", and that is the fact chain_from_prev records.
-  return edges.some((e) => e.targetHandle === target || e.targetHandle === `${target}`);
+  const feed = edges.find((e) => e.targetHandle === target);
+  if (!feed) return false;
+  const mine = order.get(sceneNodeId);
+  const theirs = order.get(feed.source);
+  if (mine === undefined || theirs === undefined) return true;
+  return theirs === mine - 1;
 }
+
+const cutOrder = (nodes: readonly GraphNode<DirectorData>[]): Map<string, number> => {
+  const m = new Map<string, number>();
+  for (const n of nodes) {
+    const oi = n.data.kind === "scene" ? (n.data as SceneData).orderIndex : undefined;
+    if (typeof oi === "number") m.set(n.id, oi);
+  }
+  return m;
+};
 
 /**
  * Diff two settled graphs into Calliope intents. Only `cal-sc-*` nodes are considered;
@@ -67,6 +83,8 @@ function chainedFrom(sceneNodeId: string, edges: readonly GraphEdge[]): boolean 
 export function diffForCalliope(prev: Snapshot, next: Snapshot): SceneIntent[] {
   const prevById = new Map(prev.nodes.map((n) => [n.id, n] as const));
   const out: SceneIntent[] = [];
+  const orderNow = cutOrder(next.nodes);
+  const orderWas = cutOrder(prev.nodes);
 
   for (const n of next.nodes) {
     const ref = calliopeRef(n.id);
@@ -92,8 +110,8 @@ export function diffForCalliope(prev: Snapshot, next: Snapshot): SceneIntent[] {
       intent.beat_id = beatNow;
       touched = true;
     }
-    const chainNow = chainedFrom(n.id, next.edges);
-    const chainWas = before ? chainedFrom(n.id, prev.edges) : chainNow;
+    const chainNow = chainedFrom(n.id, next.edges, orderNow);
+    const chainWas = before ? chainedFrom(n.id, prev.edges, orderWas) : chainNow;
     if (before && chainNow !== chainWas) {
       intent.chain_from_prev = chainNow;
       touched = true;

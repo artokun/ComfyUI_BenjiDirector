@@ -111,6 +111,7 @@ export function projectToGraph(data: CalliopeProjectData): { nodes: DirectorNode
         s.heading || `Scene ${s.order_index + 1}`,
         ds.position ?? fallback,
         {
+          orderIndex: s.order_index,
           action: s.action ?? undefined,
           durationSec: s.duration_sec ?? undefined,
           videoPath: s.video_path ?? undefined,

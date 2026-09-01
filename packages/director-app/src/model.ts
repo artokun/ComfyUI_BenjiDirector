@@ -52,6 +52,12 @@ export interface SceneData extends BaseNodeData {
   heading: string;
   action?: string;
   durationSec?: number;
+  /**
+   * Calliope's cut order (`order_index`), set at load. Continuity in Calliope means "from
+   * the scene before this one in the cut", so a LAST FRAME → IN FRAME wire between
+   * Calliope scenes is only meaningful between consecutive ones; the editor refuses others.
+   */
+  orderIndex?: number;
   /** Populated once a render lands. */
   videoPath?: string;
   ports: PortInfo[];
