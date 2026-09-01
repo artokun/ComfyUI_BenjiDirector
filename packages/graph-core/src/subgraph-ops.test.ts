@@ -98,6 +98,21 @@ function oneCrossingOut() {
   return { nodes, edges };
 }
 
+/** one external ──> TWO children inside the group, same port name on each */
+function fanIn() {
+  const nodes: N[] = [
+    group("g"),
+    node("sc1", [pin("sc1", "CHARACTER", "ref")], "g"),
+    node("sc2", [pin("sc2", "CHARACTER", "ref")], "g"),
+    node("nadia", [pout("nadia", "REF", "ref")]),
+  ];
+  const edges = [
+    edge("e1", "nadia", "sc1", "nadia:out:REF", "sc1:in:CHARACTER"),
+    edge("e2", "nadia", "sc2", "nadia:out:REF", "sc2:in:CHARACTER"),
+  ];
+  return { nodes, edges };
+}
+
 // ── promote ─────────────────────────────────────────────────────────────────────────────
 
 describe("promoteToSubgraph", () => {
@@ -151,6 +166,51 @@ describe("promoteToSubgraph", () => {
     expect(out.edges.filter((e) => e.id.endsWith("__inneredge"))).toHaveLength(1);
   });
 
+  it("one external feeding TWO children is ONE rail entry that fans out inside", () => {
+    const { nodes, edges } = fanIn();
+    const out = promoteToSubgraph("g", nodes, edges, host);
+    const rails = railsOf(out.nodes, "g");
+    expect(rails.promotedIn).toHaveLength(1);
+    const bp = rails.promotedIn[0] as BoundaryPort;
+    // Bare label: one rail, so nothing to number.
+    expect(bp.label).toBe("CHARACTER");
+    expect(bp.id).toBe("g::sc1:in:CHARACTER");
+    expect(bp.fanout).toEqual([{ childId: "sc2", childPortId: "sc2:in:CHARACTER" }]);
+
+    // ONE wire enters the container…
+    const outers = out.edges.filter((e) => e.target === "g");
+    expect(outers).toHaveLength(1);
+    expect(outers[0]).toMatchObject({ source: "nadia", sourceHandle: "nadia:out:REF", targetHandle: bp.id });
+    // …and TWO relays leave the rail's inner side, one per child.
+    const relays = out.edges.filter((e) => e.source === "g" && e.sourceHandle === innerHandleId(bp.id));
+    expect(relays.map((e) => e.targetHandle).sort()).toEqual(["sc1:in:CHARACTER", "sc2:in:CHARACTER"]);
+    expect(relays.map((e) => e.id).sort()).toEqual([`${bp.id}__inneredge`, `${bp.id}__inneredge->sc2::sc2:in:CHARACTER`]);
+  });
+
+  it("the primary target does not depend on edge order", () => {
+    const { nodes, edges } = fanIn();
+    const a = promoteToSubgraph("g", nodes, edges, host);
+    const b = promoteToSubgraph("g", nodes, [...edges].reverse(), host);
+    expect(railsOf(b.nodes, "g").promotedIn[0]?.id).toBe(railsOf(a.nodes, "g").promotedIn[0]?.id);
+  });
+
+  it("two DIFFERENT externals feeding the same-named port on two children stay two rails", () => {
+    const nodes: N[] = [
+      group("g"),
+      node("sc1", [pin("sc1", "CHARACTER", "ref")], "g"),
+      node("sc2", [pin("sc2", "CHARACTER", "ref")], "g"),
+      node("nadia", [pout("nadia", "REF", "ref")]),
+      node("bob", [pout("bob", "REF", "ref")]),
+    ];
+    const edges = [
+      edge("e1", "nadia", "sc1", "nadia:out:REF", "sc1:in:CHARACTER"),
+      edge("e2", "bob", "sc2", "bob:out:REF", "sc2:in:CHARACTER"),
+    ];
+    const rails = railsOf(promoteToSubgraph("g", nodes, edges, host).nodes, "g");
+    expect(rails.promotedIn.map((p) => p.label).sort()).toEqual(["CHARACTER.0", "CHARACTER.1"]);
+    expect(rails.promotedIn.every((p) => !p.fanout)).toBe(true);
+  });
+
   it("passes through edges that do not cross the boundary, preserving order", () => {
     const nodes: N[] = [
       group("g"),
@@ -174,12 +234,15 @@ describe("promoteToSubgraph", () => {
       node("p", [pin("p", "REF")], "g"),
       node("q", [pin("q", "REF")], "g"),
       node("r", [pin("r", "SOLO")], "g"),
-      node("ext", [pout("ext", "O")]),
+      node("x", [pout("x", "O")]),
+      node("y", [pout("y", "O")]),
+      node("z", [pout("z", "O")]),
     ];
+    // Three DIFFERENT sources: three rails, two of which share a name.
     const edges = [
-      edge("e1", "ext", "p", "ext:out:O", "p:in:REF"),
-      edge("e2", "ext", "q", "ext:out:O", "q:in:REF"),
-      edge("e3", "ext", "r", "ext:out:O", "r:in:SOLO"),
+      edge("e1", "x", "p", "x:out:O", "p:in:REF"),
+      edge("e2", "y", "q", "y:out:O", "q:in:REF"),
+      edge("e3", "z", "r", "z:out:O", "r:in:SOLO"),
     ];
     const rails = railsOf(promoteToSubgraph("g", nodes, edges, host).nodes, "g");
     expect(rails.promotedIn.map((p) => p.label).sort()).toEqual(["REF.0", "REF.1", "SOLO"]);
@@ -316,6 +379,17 @@ describe("dissolveSubgraph", () => {
       "inner:out:OUT->a:a:in:A",
       "inner:out:OUT->b:b:in:A",
     ]);
+  });
+
+  it("round-trips a fanned-IN promoted input back to every direct edge", () => {
+    const { nodes, edges } = fanIn();
+    const promoted = promoteToSubgraph("g", nodes, edges, host);
+    const back = dissolveSubgraph("g", promoted.nodes, promoted.edges);
+    expect(back.edges.map((e) => e.id).sort()).toEqual([
+      "lg:nadia:out:REF->sc1:in:CHARACTER",
+      "lg:nadia:out:REF->sc2:in:CHARACTER",
+    ]);
+    for (const e of back.edges) expect(e).toMatchObject({ source: "nadia", sourceHandle: "nadia:out:REF" });
   });
 
   it("keeps untouched edges and the container's own visual state", () => {
@@ -512,6 +586,7 @@ describe("reconcileBoundary", () => {
       node("first", [pin("first", "A")], "g"),
       node("second", [pin("second", "B")], "g"),
       node("ext", [pout("ext", "O")]),
+      node("ext2", [pout("ext2", "O")]),
     ];
     const up = promoteToSubgraph(
       "g",
@@ -521,10 +596,42 @@ describe("reconcileBoundary", () => {
     );
     expect(railsOf(up.nodes, "g").promotedIn.map((p) => p.childId)).toEqual(["second"]);
 
-    const withNew = [...up.edges, edge("e2", "ext", "first", "ext:out:O", "first:in:A")];
+    // A rail from a DIFFERENT source (the same source would join the existing rail).
+    const withNew = [...up.edges, edge("e2", "ext2", "first", "ext2:out:O", "first:in:A")];
     const after = reconcileBoundary("g", up.nodes, withNew, host);
     // "second" existed already, so it stays first even though "first" scans earlier.
     expect(railsOf(after.nodes, "g").promotedIn.map((p) => p.childId)).toEqual(["second", "first"]);
+  });
+
+  it("a merged rail keeps its label and pin when the PRIMARY child's wire goes away", () => {
+    const { nodes, edges } = fanIn();
+    const promoted = promoteToSubgraph("g", nodes, edges, host);
+    // Rename the rail, pin it.
+    const renamed = promoted.nodes.map((n) =>
+      n.id === "g"
+        ? ({ ...n, data: { ...n.data, promotedIn: (n.data.promotedIn ?? []).map((p) => ({ ...p, label: "Lead", forced: true })) } } as N)
+        : n,
+    );
+    // Cut the wire to sc1 — the primary. sc2 becomes primary, so the DERIVED id changes.
+    const cut = promoted.edges.filter((e) => e.targetHandle !== "sc1:in:CHARACTER");
+    const out = reconcileBoundary("g", renamed, cut, host);
+    const rails = railsOf(out.nodes, "g");
+    expect(rails.promotedIn).toHaveLength(1);
+    expect(rails.promotedIn[0]).toMatchObject({ id: "g::sc2:in:CHARACTER", label: "Lead", forced: true });
+    expect(rails.promotedIn[0]?.fanout).toBeUndefined();
+  });
+
+  it("a second child wired from the same source JOINS the existing rail instead of adding one", () => {
+    const { nodes, edges } = fanIn();
+    const first = promoteToSubgraph("g", nodes, [edges[0] as GraphEdge], host);
+    const renamed = first.nodes.map((n) =>
+      n.id === "g" ? ({ ...n, data: { ...n.data, promotedIn: (n.data.promotedIn ?? []).map((p) => ({ ...p, label: "Lead" })) } } as N) : n,
+    );
+    const out = reconcileBoundary("g", renamed, [...first.edges, edges[1] as GraphEdge], host);
+    const rails = railsOf(out.nodes, "g");
+    expect(rails.promotedIn).toHaveLength(1);
+    expect(rails.promotedIn[0]).toMatchObject({ id: "g::sc1:in:CHARACTER", label: "Lead", fanout: [{ childId: "sc2", childPortId: "sc2:in:CHARACTER" }] });
+    expect(out.edges.filter((e) => e.target === "g")).toHaveLength(1);
   });
 
   it("is IDEMPOTENT — reconciling twice changes nothing", () => {

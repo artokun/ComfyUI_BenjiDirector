@@ -42,6 +42,8 @@
 // layer and the outside.
 
 import {
+  boundaryTargets,
+  type BoundaryTarget,
   GROUP_TYPE,
   SUBGRAPH_TYPE,
   boundaryPortId,
@@ -216,10 +218,14 @@ export function promoteToSubgraph<D extends BaseNodeData>(
 
   const childIds = new Set(nodes.filter((n) => n.parentId === containerId).map((n) => n.id));
 
-  // Keyed by `${childId}::${childPortId}` so one child port shared by several edges promotes
-  // to exactly ONE boundary port.
-  const inByKey = new Map<string, BoundaryPort>();
+  // Outbound crossings are keyed by `${childId}::${childPortId}`: one child port feeding N
+  // externals is ONE boundary port with N outer halves.
+  //
+  // Inbound crossings are keyed by the EXTERNAL SOURCE: one external port feeding N children
+  // is one thing entering the container — one rail entry — and the split happens inside as N
+  // relays. Nadia's REF wired to two scenes is one CHARACTER rail, not CHARACTER.0 and .1.
   const outByKey = new Map<string, BoundaryPort>();
+  const inBySource = new Map<string, Array<BoundaryTarget & { type: string; label: string }>>();
 
   for (const e of edges) {
     // An edge with no handles, or referencing a handle neither endpoint has, cannot be safely
@@ -249,20 +255,30 @@ export function promoteToSubgraph<D extends BaseNodeData>(
       const child = nodes.find((n) => n.id === e.target);
       const port = child && resolveChildHandle(child, e.targetHandle, "in", host);
       if (!port) continue;
-      const key = `${e.target}::${e.targetHandle}`;
-      if (!inByKey.has(key)) {
-        inByKey.set(key, {
-          id: boundaryPortId(containerId, e.targetHandle),
-          childId: e.target,
-          childPortId: e.targetHandle,
-          type: port.type,
-          label: port.label,
-        });
+      const key = `${e.source}|${e.sourceHandle}`;
+      const members = inBySource.get(key) ?? [];
+      if (!members.some((m) => m.childId === e.target && m.childPortId === e.targetHandle)) {
+        members.push({ childId: e.target, childPortId: e.targetHandle, type: port.type, label: port.label });
       }
+      inBySource.set(key, members);
     }
   }
 
-  const promotedIn = [...inByKey.values()];
+  // The primary target — the one the id derives from — is the lexically smallest child port
+  // id, so it does not depend on the order the edges happened to be scanned in.
+  const promotedIn: BoundaryPort[] = [...inBySource.values()].map((members) => {
+    const sorted = [...members].sort((a, b) => a.childPortId.localeCompare(b.childPortId));
+    const primary = sorted[0] as (typeof sorted)[number];
+    const rest = sorted.slice(1).map(({ childId, childPortId }) => ({ childId, childPortId }));
+    return {
+      id: boundaryPortId(containerId, primary.childPortId),
+      childId: primary.childId,
+      childPortId: primary.childPortId,
+      type: primary.type,
+      label: primary.label,
+      ...(rest.length ? { fanout: rest } : {}),
+    };
+  });
   const promotedOut = [...outByKey.values()];
   dedupeRailLabels(promotedIn);
   dedupeRailLabels(promotedOut);
@@ -278,8 +294,12 @@ export function promoteToSubgraph<D extends BaseNodeData>(
       : n,
   );
 
-  const inIdByKey = new Map(promotedIn.map((bp) => [`${bp.childId}::${bp.childPortId}`, bp.id]));
+  const inIdByKey = new Map<string, string>();
+  for (const bp of promotedIn) for (const t of boundaryTargets(bp)) inIdByKey.set(`${t.childId}::${t.childPortId}`, bp.id);
   const outIdByKey = new Map(promotedOut.map((bp) => [`${bp.childId}::${bp.childPortId}`, bp.id]));
+  // One outer half per (external source → boundary port): the second child a source feeds
+  // adds a relay inside, not another wire outside.
+  const outerSeen = new Set<string>();
 
   // Pass A — outer halves, plus every untouched edge, in original order.
   const newEdges: GraphEdge[] = [];
@@ -307,42 +327,40 @@ export function promoteToSubgraph<D extends BaseNodeData>(
         newEdges.push(e);
         continue;
       }
+      const seenKey = `${e.source}|${e.sourceHandle}|${bpId}`;
+      if (outerSeen.has(seenKey)) continue;
+      outerSeen.add(seenKey);
       newEdges.push({ ...e, id: `${e.id}__outer`, target: containerId, targetHandle: bpId });
     }
   }
 
-  // Pass B — exactly one inner relay per boundary port. Edge id is derived from the boundary
-  // port id, so it too is stable across re-conversion.
-  for (const bp of promotedIn) newEdges.push(innerEdgeFor(containerId, bp, "in", host));
-  for (const bp of promotedOut) newEdges.push(innerEdgeFor(containerId, bp, "out", host));
+  // Pass B — the inner relays: one per boundary port, plus one per fan-out target. Edge ids
+  // derive from the boundary port id (and the extra target), so they are stable across
+  // re-conversion.
+  for (const bp of promotedIn) newEdges.push(...innerEdgesFor(containerId, bp, "in", host));
+  for (const bp of promotedOut) newEdges.push(...innerEdgesFor(containerId, bp, "out", host));
 
   return { nodes: newNodes, edges: newEdges };
 }
 
-function innerEdgeFor(
+function innerEdgesFor(
   containerId: string,
   bp: BoundaryPort,
   side: "in" | "out",
   host: GraphOpsHost,
-): GraphEdge {
+): GraphEdge[] {
   const style = host.edgeStyle?.(bp.type);
-  const base =
-    side === "in"
-      ? {
-          id: `${bp.id}__inneredge`,
-          source: containerId,
-          target: bp.childId,
-          sourceHandle: innerHandleId(bp.id),
-          targetHandle: bp.childPortId,
-        }
-      : {
-          id: `${bp.id}__inneredge`,
-          source: bp.childId,
-          target: containerId,
-          sourceHandle: bp.childPortId,
-          targetHandle: innerHandleId(bp.id),
-        };
-  return style ? { ...base, style } : base;
+  const relay = (t: BoundaryTarget, primary: boolean): GraphEdge => {
+    const id = primary ? `${bp.id}__inneredge` : `${bp.id}__inneredge->${t.childId}::${t.childPortId}`;
+    const base =
+      side === "in"
+        ? { id, source: containerId, target: t.childId, sourceHandle: innerHandleId(bp.id), targetHandle: t.childPortId }
+        : { id, source: t.childId, target: containerId, sourceHandle: t.childPortId, targetHandle: innerHandleId(bp.id) };
+    return style ? { ...base, style } : base;
+  };
+  // Fan-out is an input-side notion; an output port drains exactly one inner port.
+  const targets = side === "in" ? boundaryTargets(bp) : [{ childId: bp.childId, childPortId: bp.childPortId }];
+  return targets.map((t, i) => relay(t, i === 0));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
@@ -354,7 +372,8 @@ function innerEdgeFor(
  * direct edge and dropping the promoted contract and blueprint linkage.
  *
  * One inner may pair with MANY outers — a promoted output feeding N externals rebuilds as N
- * direct edges.
+ * direct edges — and one outer may pair with MANY inners: a promoted input fanning out to N
+ * children rebuilds as N direct edges from the same external port.
  */
 export function dissolveSubgraph<D extends BaseNodeData>(
   containerId: string,
@@ -393,10 +412,12 @@ export function dissolveSubgraph<D extends BaseNodeData>(
     else untouched.push(e);
   }
 
-  const innerByBp = new Map<string, GraphEdge>();
+  const innersByBp = new Map<string, GraphEdge[]>();
   for (const e of innerHalves) {
     const handle = e.source === containerId ? e.sourceHandle : e.targetHandle;
-    if (handle) innerByBp.set(outerHandleId(handle), e);
+    if (!handle) continue;
+    const key = outerHandleId(handle);
+    innersByBp.set(key, [...(innersByBp.get(key) ?? []), e]);
   }
 
   const merged: GraphEdge[] = [];
@@ -404,30 +425,30 @@ export function dissolveSubgraph<D extends BaseNodeData>(
     const onSource = outer.source === containerId;
     const bpId = onSource ? outer.sourceHandle : outer.targetHandle;
     if (!bpId) continue;
-    const inner = innerByBp.get(bpId);
+    const inners = innersByBp.get(bpId) ?? [];
     // An outer with no inner is an orphaned half: the boundary port has nothing to relay
     // through, so there is no direct edge to reconstruct.
-    if (!inner) continue;
-
-    if (onSource) {
-      // child → container (inner) → external (outer)  ⇒  child → external.
-      // The id is derived from the ENDPOINTS, not `${outer.id}__merged`. reconcileBoundary
-      // dissolves and re-promotes on every parent change, and a suffix-based id would chain
-      // into `…__merged__outer__merged…` a few reconciles in.
-      merged.push({
-        ...outer,
-        id: `lg:${inner.sourceHandle}->${outer.targetHandle}`,
-        source: inner.source,
-        sourceHandle: inner.sourceHandle,
-      });
-    } else {
-      // external → container (outer) → child (inner)  ⇒  external → child.
-      merged.push({
-        ...outer,
-        id: `lg:${outer.sourceHandle}->${inner.targetHandle}`,
-        target: inner.target,
-        targetHandle: inner.targetHandle,
-      });
+    for (const inner of inners) {
+      if (onSource) {
+        // child → container (inner) → external (outer)  ⇒  child → external.
+        // The id is derived from the ENDPOINTS, not `${outer.id}__merged`. reconcileBoundary
+        // dissolves and re-promotes on every parent change, and a suffix-based id would chain
+        // into `…__merged__outer__merged…` a few reconciles in.
+        merged.push({
+          ...outer,
+          id: `lg:${inner.sourceHandle}->${outer.targetHandle}`,
+          source: inner.source,
+          sourceHandle: inner.sourceHandle,
+        });
+      } else {
+        // external → container (outer) → child (inner)  ⇒  external → child.
+        merged.push({
+          ...outer,
+          id: `lg:${outer.sourceHandle}->${inner.targetHandle}`,
+          target: inner.target,
+          targetHandle: inner.targetHandle,
+        });
+      }
     }
   }
 
@@ -476,7 +497,23 @@ export function reconcileBoundary<D extends BaseNodeData>(
   if (!target || !isSubgraph(target) || !rails) return { nodes: [...nodes], edges: [...edges] };
 
   const oldLabels = new Map<string, string>();
-  for (const bp of [...rails.promotedIn, ...rails.promotedOut]) oldLabels.set(bp.id, bp.label);
+  // A merged (fan-in) port's id follows its primary target; when that child's wire goes and
+  // another member becomes primary, the id changes but the rail is the same rail. So every
+  // old port is also findable by any of its targets, and a fresh port with no match by id
+  // falls back to that — the label, the order and the pin follow the rail, not the id.
+  const oldByTarget = new Map<string, BoundaryPort>();
+  for (const bp of [...rails.promotedIn, ...rails.promotedOut]) {
+    oldLabels.set(bp.id, bp.label);
+    for (const t of boundaryTargets(bp)) oldByTarget.set(`${t.childId}::${t.childPortId}`, bp);
+  }
+  const priorOf = (bp: BoundaryPort): BoundaryPort | undefined => {
+    if (oldLabels.has(bp.id)) return undefined;
+    for (const t of boundaryTargets(bp)) {
+      const old = oldByTarget.get(`${t.childId}::${t.childPortId}`);
+      if (old) return old;
+    }
+    return undefined;
+  };
   const oldOrderIn = rails.promotedIn.map((p) => p.id);
   const oldOrderOut = rails.promotedOut.map((p) => p.id);
   const { blueprintId, blueprintVersion } = rails;
@@ -488,7 +525,7 @@ export function reconcileBoundary<D extends BaseNodeData>(
     ...rails.promotedIn.filter((p) => p.forced).map((p) => ({ side: "in" as const, p: { ...p } })),
     ...rails.promotedOut.filter((p) => p.forced).map((p) => ({ side: "out" as const, p: { ...p } })),
   ];
-  const forcedKeys = new Set(forced.map(({ p }) => `${p.childId}::${p.childPortId}`));
+  const forcedKeys = new Set(forced.flatMap(({ p }) => boundaryTargets(p).map((t) => `${t.childId}::${t.childPortId}`)));
 
   const dissolved = dissolveSubgraph(containerId, nodes, edges);
   const repromoted = promoteToSubgraph(containerId, dissolved.nodes, dissolved.edges, host);
@@ -499,10 +536,14 @@ export function reconcileBoundary<D extends BaseNodeData>(
 
   const promotedIn = [...freshRails.promotedIn];
   const promotedOut = [...freshRails.promotedOut];
+  /** fresh id → the id to rank/label by: its own when known, else the rail it continues. */
+  const alias = new Map<string, string>();
   for (const bp of [...promotedIn, ...promotedOut]) {
-    const old = oldLabels.get(bp.id);
+    const prior = priorOf(bp);
+    const old = oldLabels.get(bp.id) ?? prior?.label;
     if (old !== undefined) bp.label = old;
-    if (forcedKeys.has(`${bp.childId}::${bp.childPortId}`)) bp.forced = true;
+    alias.set(bp.id, prior?.id ?? bp.id);
+    if (boundaryTargets(bp).some((t) => forcedKeys.has(`${t.childId}::${t.childPortId}`))) bp.forced = true;
   }
 
   // Re-inject pinned ports the crossing scan did not reproduce, rebuilding the inner relay
@@ -527,16 +568,21 @@ export function reconcileBoundary<D extends BaseNodeData>(
   for (const { side, p } of forced) {
     const list = side === "in" ? promotedIn : promotedOut;
     if (!insideContainer(p.childId)) continue;
-    if (list.some((q) => q.childId === p.childId && q.childPortId === p.childPortId)) continue;
+    // The pin protects the RAIL, not each membership: if any target of the pinned port is
+    // still fed through a fresh port, that port IS the rail (label and pin carried over
+    // above) and the member whose wire went is simply no longer in it. Re-injecting here
+    // would feed the survivors twice.
+    const pinned = new Set(boundaryTargets(p).map((t) => `${t.childId}::${t.childPortId}`));
+    if (list.some((q) => boundaryTargets(q).some((t) => pinned.has(`${t.childId}::${t.childPortId}`)))) continue;
     list.push({ ...p });
-    extraEdges.push(innerEdgeFor(containerId, p, side, host));
+    extraEdges.push(...innerEdgesFor(containerId, p, side, host));
   }
 
   // Restore rail order: surviving ports keep their prior relative positions, and anything new
   // sorts to the BOTTOM rather than wherever the edge scan happened to encounter it.
   const orderBy = (oldOrder: readonly string[]) => (a: BoundaryPort, b: BoundaryPort) => {
     const rank = (id: string) => {
-      const i = oldOrder.indexOf(id);
+      const i = oldOrder.indexOf(alias.get(id) ?? id);
       return i < 0 ? Number.MAX_SAFE_INTEGER : i;
     };
     return rank(a.id) - rank(b.id);

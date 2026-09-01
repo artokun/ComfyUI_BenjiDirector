@@ -51,7 +51,27 @@ export interface BoundaryPort {
   label: string;
   /** User-pinned: kept on the rail even with no wire crossing the boundary. */
   forced?: boolean;
+  /**
+   * Further inner ports this boundary port ALSO feeds (inputs only). One external source
+   * wired to several children is one thing entering the container, so it is one rail entry;
+   * the split happens inside, as one relay per target. `childId`/`childPortId` stay the
+   * primary target — the one the id is derived from — so every reader that knows only those
+   * keeps working; `fanout` lists the rest.
+   */
+  fanout?: BoundaryTarget[];
 }
+
+/** One inner port a boundary port aliases. */
+export interface BoundaryTarget {
+  childId: string;
+  childPortId: string;
+}
+
+/** Every inner port a boundary port feeds or drains: the primary first, then any fan-out. */
+export const boundaryTargets = (bp: BoundaryPort): BoundaryTarget[] => [
+  { childId: bp.childId, childPortId: bp.childPortId },
+  ...(bp.fanout ?? []),
+];
 
 /** Minimal port descriptor. The host resolves handles to these. */
 export interface PortInfo {
