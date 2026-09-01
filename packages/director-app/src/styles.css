@@ -224,3 +224,22 @@
 }
 .bd-face-detail { color: #86efac; font-size: 10px; text-transform: uppercase; }
 .bd-faces-empty { color: var(--bd-dim); font-size: 10px; font-style: italic; text-align: center; padding: .3rem 0; }
+
+/* Right-click palette. Fixed-positioned because it is placed from client coordinates. */
+.bd-menu {
+  position: fixed; z-index: 40; min-width: 168px;
+  background: var(--bd-panel); border: 1px solid var(--bd-line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / .5); padding: 4px; display: flex; flex-direction: column; gap: 2px;
+}
+.bd-menu-head { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--bd-dim); padding: .25rem .5rem; }
+.bd-menu button {
+  background: none; border: none; color: var(--bd-text); text-align: left;
+  font: inherit; padding: .3rem .5rem; border-radius: 5px; cursor: pointer;
+}
+.bd-menu button:hover { background: #343442; }
+
+.bd-title-text { cursor: text; }
+.bd-title-input {
+  background: #16161c; color: var(--bd-text); border: 1px solid var(--bd-accent);
+  border-radius: 4px; font: inherit; font-weight: 600; padding: 0 .25rem; min-width: 120px; outline: none;
+}

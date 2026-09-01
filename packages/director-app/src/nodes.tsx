@@ -41,6 +41,7 @@ export interface EditorActions {
   reorderRail(containerId: string, side: "in" | "out", from: number, to: number): void;
   toggleCollapse(containerId: string): void;
   togglePin(nodeId: string): void;
+  renameNode(nodeId: string, label: string): void;
 }
 export const ActionsContext = createContext<EditorActions | null>(null);
 const useActions = () => useContext(ActionsContext);
@@ -133,15 +134,58 @@ export function AssetNode({ id, data, selected }: NodeProps) {
   );
 }
 
+/**
+ * A container's title, editable in place.
+ *
+ * ifr-node-lab's EditableTitle. `nodrag` matters: without it React Flow starts panning the
+ * moment you press into the input, and you can never place a cursor.
+ */
+function EditableTitle({ id, label }: { id: string; label: string }) {
+  const actions = useActions();
+  const [text, setText] = useState<string | null>(null);
+  if (text === null) {
+    return (
+      <span
+        className="bd-title-text"
+        title="Double-click to rename"
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          setText(label);
+        }}
+      >
+        {label}
+      </span>
+    );
+  }
+  const commit = () => {
+    actions?.renameNode(id, text);
+    setText(null);
+  };
+  return (
+    <input
+      className="bd-title-input nodrag"
+      autoFocus
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        else if (e.key === "Escape") setText(null);
+      }}
+    />
+  );
+}
+
 /** An un-promoted Beat: a box you drag scenes into. No rails yet, by definition. */
-export function GroupNode({ data, selected }: NodeProps) {
+export function GroupNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as BeatData;
   return (
     <div className={`bd-group${selected ? " is-selected" : ""}`} style={{ width: d.width, height: d.height }}>
       <NodeResizer minWidth={280} minHeight={200} isVisible={!!selected} color="#c084fc" />
       <div className="bd-group-title">
-        🎞️ {d.label}
-        <span className="bd-hint">group — promote to expose its edges</span>
+        🎞️ <EditableTitle id={id} label={d.label} />
+        <span className="bd-hint">group — make it a subgraph to expose its edges</span>
       </div>
     </div>
   );
@@ -308,7 +352,9 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
       <div className={`bd-collapsed${selected ? " is-selected" : ""}`}>
         <div className="bd-collapsed-head">
           {caret}
-          <span className="bd-collapsed-title">🎞️ {d.label}</span>
+          <span className="bd-collapsed-title">
+            🎞️ <EditableTitle id={id} label={d.label} />
+          </span>
           <span className="bd-hint">
             {d.promotedIn.length} in · {d.promotedOut.length} out
           </span>
@@ -341,7 +387,7 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
       <NodeResizer minWidth={320} minHeight={220} isVisible={!!selected} color="#c084fc" />
       <div className="bd-group-title">
         {caret}
-        🎞️ {d.label}
+        🎞️ <EditableTitle id={id} label={d.label} />
         <span className="bd-hint">
           {d.promotedIn.length} in · {d.promotedOut.length} out
         </span>

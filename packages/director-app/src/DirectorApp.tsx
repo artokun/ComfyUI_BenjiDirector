@@ -16,6 +16,7 @@ import {
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
+  useReactFlow,
   useUpdateNodeInternals,
   type Connection,
   type Edge,
@@ -42,8 +43,10 @@ import {
 import { probe, resolveConfig, type ReachabilityState } from "@benjidirector/calliope-client";
 import {
   PORT_COLOR,
+  asset,
   beat,
   demoProject,
+  scene,
   directorHost,
   type BeatData,
   type DirectorData,
@@ -167,6 +170,8 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
   const [status, setStatus] = useState<ReachabilityState | null>(null);
   const [note, setNote] = useState("");
+  const [menu, setMenu] = useState<{ x: number; y: number; flow: { x: number; y: number } } | null>(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   /**
    * Force React Flow to measure.
@@ -361,6 +366,17 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
           settle(next, es, { reparent: false });
         });
       },
+      renameNode(nodeId, label) {
+        const next = label.trim();
+        if (!next) return;
+        withCurrent((ns, es) => {
+          settle(
+            ns.map((n) => (n.id === nodeId ? ({ ...n, data: { ...n.data, label: next } } as RFNode) : n)),
+            es,
+            { reparent: false },
+          );
+        });
+      },
       togglePin(nodeId) {
         withCurrent((ns, es) => {
           const next = ns.map((n) =>
@@ -428,6 +444,58 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
     return undefined;
   }, [edges, nodes, settle]);
 
+  /**
+   * Add a node where the user right-clicked.
+   *
+   * Until now the canvas could only ever show the demo project — there was no way to add a
+   * Scene at all, which made "the agent and you edit the same graph" only half true.
+   * `screenToFlowPosition` converts the click through the current pan and zoom; using raw
+   * client coordinates puts the node somewhere else at any zoom but 100%.
+   */
+  const addNode = useCallback(
+    (kind: "scene" | "character" | "location" | "item", at: { x: number; y: number }) => {
+      const stamp = Date.now().toString(36);
+      const node =
+        kind === "scene"
+          ? scene(`sc-${stamp}`, "New scene", at)
+          : asset(`${kind}-${stamp}`, kind === "character" ? "New character" : kind === "location" ? "New location" : "New item", kind, at);
+      setMenu(null);
+      withCurrent((ns, es) => {
+        // Reparent ON: dropping inside a Beat should join it, exactly as a drag would.
+        settle([...ns, node as unknown as RFNode], es);
+        setNote(`added ${node.data.label}`);
+      });
+    },
+    [settle, withCurrent],
+  );
+
+  /** Delete the selection, and every edge that touched it, then reconcile. */
+  const deleteSelection = useCallback(() => {
+    withCurrent((ns, es) => {
+      const doomed = new Set(ns.filter((n) => n.selected).map((n) => n.id));
+      if (!doomed.size) {
+        setNote("nothing selected");
+        return;
+      }
+      // Children of a deleted container go with it — an orphan holding a parentId that no
+      // longer resolves renders at the wrong place and confuses containment forever after.
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const n of ns) {
+          if (!doomed.has(n.id) && n.parentId && doomed.has(n.parentId)) {
+            doomed.add(n.id);
+            grew = true;
+          }
+        }
+      }
+      const nextNodes = ns.filter((n) => !doomed.has(n.id));
+      const nextEdges = es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target));
+      setNote(`deleted ${doomed.size} node${doomed.size === 1 ? "" : "s"}`);
+      settle(nextNodes, nextEdges, { reparent: false });
+    });
+  }, [settle, withCurrent]);
+
   const promote = useCallback(() => {
     const target = selectedContainer();
     if (!target) return setNote("select a Beat first");
@@ -464,6 +532,7 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
           <button type="button" onClick={groupSelection}>Group</button>
           <button type="button" onClick={promote}>Subgraph</button>
           <button type="button" onClick={dissolve}>Dissolve</button>
+          <button type="button" onClick={deleteSelection}>Delete</button>
           <button
             type="button"
             onClick={() => {
@@ -497,11 +566,32 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
             onEdgesChange={onEdgesChange}
             onNodeDragStop={onNodeDragStop}
             onConnect={onConnect}
+            onPaneClick={() => setMenu(null)}
+            onPaneContextMenu={(e) => {
+              e.preventDefault();
+              const ev = e as unknown as MouseEvent;
+              setMenu({
+                x: ev.clientX,
+                y: ev.clientY,
+                flow: screenToFlowPosition({ x: ev.clientX, y: ev.clientY }),
+              });
+            }}
+            onNodesDelete={() => queueMicrotask(() => withCurrent((ns, es) => settle(ns, es, { reparent: false })))}
+            deleteKeyCode={["Delete", "Backspace"]}
             nodeTypes={nodeTypes}
             fitView
             proOptions={{ hideAttribution: true }}
           >
-            <Background gap={18} size={1} color="#2a2a35" />
+            {menu ? (
+            <div className="bd-menu" style={{ left: menu.x, top: menu.y }} onContextMenu={(e) => e.preventDefault()}>
+              <div className="bd-menu-head">Add here</div>
+              <button type="button" onClick={() => addNode("scene", menu.flow)}>🎬 Scene</button>
+              <button type="button" onClick={() => addNode("character", menu.flow)}>🧍 Character</button>
+              <button type="button" onClick={() => addNode("location", menu.flow)}>🏙️ Location</button>
+              <button type="button" onClick={() => addNode("item", menu.flow)}>🎒 Item</button>
+            </div>
+          ) : null}
+          <Background gap={18} size={1} color="#2a2a35" />
             <Controls showInteractive={false} />
           </ReactFlow>
         </div>
