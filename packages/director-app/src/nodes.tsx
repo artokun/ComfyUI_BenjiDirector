@@ -492,6 +492,41 @@ function Rail({
   );
 }
 
+/**
+ * A collapsed Beat's rails, stacked on one hub at the header's edge.
+ *
+ * One visible dot per side; behind it, every boundary port's outer handle at the same spot
+ * (so each wire keeps its own handle id and re-attaches when the Beat expands) plus its inner
+ * relay handle, zero-sized — the children are hidden, but React Flow still wants the handle a
+ * hidden edge names to exist.
+ */
+function RailHub({ containerId, side, ports, tint }: { containerId: string; side: "in" | "out"; ports: BoundaryPort[]; tint: string }) {
+  const outerType = side === "in" ? "target" : "source";
+  const innerType = side === "in" ? "source" : "target";
+  const outerPos = side === "in" ? Position.Left : Position.Right;
+  const innerPos = side === "in" ? Position.Right : Position.Left;
+  const title = ports.length ? `${side === "in" ? "in" : "out"}: ${ports.map((p) => p.label).join(", ")}` : side === "in" ? "no inputs" : "no outputs";
+  return (
+    <>
+      {ports.map((bp) => (
+        <Handle
+          key={bp.id}
+          id={bp.id}
+          type={outerType}
+          position={outerPos}
+          className="bd-hub"
+          title={title}
+          style={{ background: tint, top: "50%" }}
+        />
+      ))}
+      {ports.map((bp) => (
+        <Handle key={innerHandleId(bp.id)} id={innerHandleId(bp.id)} type={innerType} position={innerPos} className="bd-hub-inner" style={{ top: "50%" }} />
+      ))}
+      {ports.length === 0 ? <span className={`bd-hub bd-hub-empty bd-hub-${side}`} title={title} /> : null}
+    </>
+  );
+}
+
 /** A promoted Beat. Expanded it shows its rails; collapsed it is one card that still wires. */
 export function SubgraphNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as BeatData;
@@ -522,14 +557,22 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
   );
 
   if (collapsed) {
+    // Collapsed, a Beat is a composed node, not a box with rails (ifr-node-lab's collapsed
+    // subgraph): every input wire lands on ONE hub at the header's left edge, every output
+    // leaves from one hub at its right, the body is the pinned widgets — and with nothing
+    // pinned the whole thing is a pill. The rails still exist as handles (each keeps its id,
+    // so the wires stay attached); they are just stacked on the hub instead of listed.
+    const faces = d.faces ?? [];
+    const pill = faces.length === 0;
     return (
       <div
-        className={`bd-collapsed${selected ? " is-selected" : ""}`}
-        style={{ width: "100%", height: "100%", borderColor: tint, background: `color-mix(in srgb, ${tint} 10%, #1e1e26)` }}
+        className={`bd-collapsed${pill ? " is-pill" : ""}${selected ? " is-selected" : ""}`}
+        style={{ width: "100%", height: pill ? "auto" : "100%", borderColor: tint, background: `color-mix(in srgb, ${tint} 10%, #1e1e26)` }}
       >
-        <NodeResizer minWidth={240} minHeight={80} isVisible={!!selected} color={tint} />
+        <NodeResizer minWidth={240} minHeight={80} isVisible={!!selected && !pill} color={tint} />
         <ContainerToolbar id={id} isSubgraph collapsed visible={!!selected} color={d.color} />
         <div className="bd-collapsed-head">
+          <RailHub containerId={id} side="in" ports={d.promotedIn} tint={tint} />
           {caret}
           <span className="bd-collapsed-title">
             🎞️ <EditableTitle id={id} label={d.label} />
@@ -537,18 +580,17 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
           <span className="bd-hint">
             {d.promotedIn.length} in · {d.promotedOut.length} out
           </span>
+          <RailHub containerId={id} side="out" ports={d.promotedOut} tint={tint} />
         </div>
-        <div className="bd-collapsed-body">
-          <Rail containerId={id} side="in" ports={d.promotedIn} collapsed tint={tint} />
-          <div className="bd-faces">
-            {(d.faces ?? []).length === 0 ? (
-              <span className="bd-faces-empty">nothing pinned — 📌 a node inside to surface it here</span>
-            ) : (
-              (d.faces ?? []).map((f) => <FaceRow face={f} key={f.id} />)
-            )}
+        {pill ? null : (
+          <div className="bd-collapsed-body">
+            <div className="bd-faces">
+              {faces.map((f) => (
+                <FaceRow face={f} key={f.id} />
+              ))}
+            </div>
           </div>
-          <Rail containerId={id} side="out" ports={d.promotedOut} collapsed tint={tint} />
-        </div>
+        )}
       </div>
     );
   }

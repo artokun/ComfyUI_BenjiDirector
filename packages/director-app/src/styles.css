@@ -200,6 +200,23 @@
 /* Collapsed: the rails sit INSIDE the card body rather than straddling an edge. */
 .bd-collapsed .bd-rail { position: static; transform: none; }
 .bd-collapsed .bd-rail-out { align-items: flex-end; }
+.bd-collapsed.is-pill { padding: .3rem .6rem; }
+.bd-collapsed-head { position: relative; }
+/* The hub: every rail's handle sits on this one dot at the header's edge. */
+.bd-collapsed .react-flow__handle.bd-hub {
+  width: 11px; height: 11px; border: 2px solid #1e1e26; border-radius: 50%;
+}
+.bd-collapsed .react-flow__handle.bd-hub.react-flow__handle-left { left: -14px; }
+.bd-collapsed .react-flow__handle.bd-hub.react-flow__handle-right { right: -14px; }
+.bd-collapsed .bd-hub-empty {
+  position: absolute; top: 50%; width: 9px; height: 9px; transform: translateY(-50%);
+  border: 2px dashed #6d5a86; border-radius: 50%; background: transparent;
+}
+.bd-collapsed .bd-hub-empty.bd-hub-in { left: -13px; }
+.bd-collapsed .bd-hub-empty.bd-hub-out { right: -13px; }
+.bd-collapsed .react-flow__handle.bd-hub-inner {
+  width: 1px; height: 1px; min-width: 0; min-height: 0; opacity: 0; pointer-events: none; border: none;
+}
 
 /* React Flow's own chrome, toned to match. */
 .bd-root .react-flow__controls-button {
