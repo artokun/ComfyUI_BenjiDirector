@@ -21,7 +21,14 @@
 // positioned ancestor, and getting that wrong walks the handle out of the card and takes the
 // edge endpoint with it.
 
-import { Handle, NodeResizer, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
+import {
+  Handle,
+  NodeResizer,
+  NodeToolbar,
+  Position,
+  useUpdateNodeInternals,
+  type NodeProps,
+} from "@xyflow/react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { emptySlotHandle, innerHandleId, type BoundaryPort } from "@benjidirector/graph-core";
 import { PORT_COLOR, type AssetData, type BeatData, type DirectorPortType, type SceneData } from "./model.js";
@@ -33,6 +40,7 @@ export interface EditorActions {
   renameRail(containerId: string, side: "in" | "out", portId: string, label: string): void;
   reorderRail(containerId: string, side: "in" | "out", from: number, to: number): void;
   toggleCollapse(containerId: string): void;
+  togglePin(nodeId: string): void;
 }
 export const ActionsContext = createContext<EditorActions | null>(null);
 const useActions = () => useContext(ActionsContext);
@@ -44,12 +52,44 @@ const dot = (type: DirectorPortType) => ({
   border: "2px solid #14141a",
 });
 
-export function SceneNode({ data, selected }: NodeProps) {
+/**
+ * The pin.
+ *
+ * ifr-node-lab's yellow pin, and it does one specific thing: it decides whether this node
+ * shows up on its Beat's face when that Beat is collapsed. A collapsed container is meant to
+ * read as a composed node — the few controls its author chose to surface — not as an opaque
+ * box, and this is the only way to choose them.
+ */
+function PinToolbar({ id, promoted, visible }: { id: string; promoted: boolean; visible: boolean }) {
+  const actions = useActions();
+  return (
+    <NodeToolbar isVisible={visible} position={Position.Top} className="bd-nodebar">
+      <button
+        type="button"
+        className={`bd-pin${promoted ? " is-on" : ""}`}
+        title={
+          promoted
+            ? "Promoted — shows on the collapsed Beat's face (click to unpromote)"
+            : "Promote — show this on the collapsed Beat's face"
+        }
+        onClick={(e) => {
+          e.stopPropagation();
+          actions?.togglePin(id);
+        }}
+      >
+        📌
+      </button>
+    </NodeToolbar>
+  );
+}
+
+export function SceneNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as SceneData;
   const ins = d.ports.filter((p) => p.isInput);
   const outs = d.ports.filter((p) => !p.isInput);
   return (
-    <div className={`bd-node bd-scene${selected ? " is-selected" : ""}`}>
+    <div className={`bd-node bd-scene${selected ? " is-selected" : ""}${d.promoted ? " is-promoted" : ""}`}>
+      <PinToolbar id={id} promoted={!!d.promoted} visible={!!selected} />
       <div className="bd-node-title">{d.heading}</div>
       {d.videoPath ? <div className="bd-badge">rendered</div> : null}
       <div className="bd-ports">
@@ -70,12 +110,13 @@ export function SceneNode({ data, selected }: NodeProps) {
   );
 }
 
-export function AssetNode({ data, selected }: NodeProps) {
+export function AssetNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as AssetData;
   const out = d.ports[0];
   const icon = d.asset === "character" ? "🧍" : d.asset === "location" ? "🏙️" : "🎒";
   return (
-    <div className={`bd-node bd-asset${selected ? " is-selected" : ""}`}>
+    <div className={`bd-node bd-asset${selected ? " is-selected" : ""}${d.promoted ? " is-promoted" : ""}`}>
+      <PinToolbar id={id} promoted={!!d.promoted} visible={!!selected} />
       <div className="bd-node-title">
         <span className="bd-icon">{icon}</span>
         {d.label}
@@ -274,6 +315,18 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
         </div>
         <div className="bd-collapsed-body">
           <Rail containerId={id} side="in" ports={d.promotedIn} collapsed />
+          <div className="bd-faces">
+            {(d.faces ?? []).length === 0 ? (
+              <span className="bd-faces-empty">nothing pinned — 📌 a node inside to surface it here</span>
+            ) : (
+              (d.faces ?? []).map((f) => (
+                <div className="bd-face" key={f.id}>
+                  <span className="bd-face-label">{f.label}</span>
+                  {f.detail ? <span className="bd-face-detail">{f.detail}</span> : null}
+                </div>
+              ))
+            )}
+          </div>
           <Rail containerId={id} side="out" ports={d.promotedOut} collapsed />
         </div>
       </div>

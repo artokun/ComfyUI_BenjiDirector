@@ -27,6 +27,14 @@ export const PORT_COLOR: Record<DirectorPortType, string> = {
 /** A Scene node's payload. Mirrors the fields Calliope actually stores on `scenes`. */
 export interface SceneData extends BaseNodeData {
   kind: "scene";
+  /**
+   * Pinned to the Beat's collapsed face.
+   *
+   * ifr-node-lab's yellow pin: a collapsed container is not just a box with rails, it is a
+   * composed node showing the controls its author chose to surface. Everything else inside
+   * stays hidden. This is the flag that decides which.
+   */
+  promoted?: boolean;
   heading: string;
   action?: string;
   durationSec?: number;
@@ -38,12 +46,22 @@ export interface SceneData extends BaseNodeData {
 /** An asset node — Character / Location / Item, Calliope's reusable consistency records. */
 export interface AssetData extends BaseNodeData {
   kind: "asset";
+  promoted?: boolean;
   asset: "character" | "location" | "item";
   ports: PortInfo[];
 }
 
+/** One row on a collapsed Beat's face: a descendant its author pinned. */
+export interface PromotedFace {
+  id: string;
+  label: string;
+  detail?: string;
+}
+
 export interface BeatData extends BaseNodeData, ContainerNodeData {
   kind: "beat";
+  /** Derived every settle from pinned descendants — never edited directly. */
+  faces?: PromotedFace[];
 }
 
 export type DirectorData = SceneData | AssetData | BeatData;

@@ -32,6 +32,7 @@ import {
   parseEmptySlotHandle,
   promoteToSubgraph,
   reconcileBoundary,
+  absolutePos,
   sortParentsFirst,
   uniquifyLabel,
   type BoundaryPort,
@@ -41,6 +42,7 @@ import {
 import { probe, resolveConfig, type ReachabilityState } from "@benjidirector/calliope-client";
 import {
   PORT_COLOR,
+  beat,
   demoProject,
   directorHost,
   type BeatData,
@@ -101,9 +103,38 @@ function decorate(nodes: RFNode[], edges: Edge[]): { nodes: RFNode[]; edges: Edg
     return false;
   };
 
-  const outNodes = nodes.map((n) => {
+  const outNodes0 = nodes.map((n) => {
     const hide = hiddenNode(n);
     return !!n.hidden === hide ? n : ({ ...n, hidden: hide } as RFNode);
+  });
+
+  // A collapsed Beat's face is DERIVED from which descendants are pinned — never stored by
+  // hand. Descendants, not children: a pin two levels down still belongs to the outermost
+  // collapsed card, because that is the only card the user can still see.
+  const descendantsOf = (containerId: string) =>
+    outNodes0.filter((n) => {
+      let p = n.parentId;
+      const seen = new Set<string>();
+      while (p && !seen.has(p)) {
+        seen.add(p);
+        if (p === containerId) return true;
+        p = byId.get(p)?.parentId;
+      }
+      return false;
+    });
+
+  const outNodes = outNodes0.map((n) => {
+    if (!isContainer(n)) return n;
+    const faces = descendantsOf(n.id)
+      .filter((c) => (c.data as SceneData).promoted)
+      .map((c) => {
+        const d = c.data as SceneData;
+        return { id: c.id, label: d.heading ?? d.label, detail: d.videoPath ? "rendered" : undefined };
+      });
+    const prev = rails(n).faces ?? [];
+    const same =
+      prev.length === faces.length && prev.every((f, i) => f.id === faces[i]?.id && f.detail === faces[i]?.detail);
+    return same ? n : ({ ...n, data: { ...n.data, faces } } as RFNode);
   });
   const hidden = new Set(outNodes.filter((n) => n.hidden).map((n) => n.id));
   const types = handleTypes(outNodes);
@@ -330,6 +361,16 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
           settle(next, es, { reparent: false });
         });
       },
+      togglePin(nodeId) {
+        withCurrent((ns, es) => {
+          const next = ns.map((n) =>
+            n.id === nodeId
+              ? ({ ...n, data: { ...n.data, promoted: !(n.data as SceneData).promoted } } as RFNode)
+              : n,
+          );
+          settle(next, es, { reparent: false });
+        });
+      },
       toggleCollapse(containerId) {
         withCurrent((ns, es) => {
           const next = ns.map((n) =>
@@ -346,6 +387,46 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
     () => (nodes as RFNode[]).find((n) => n.selected && isContainer(n)),
     [nodes],
   );
+
+  /**
+   * Wrap the selection in a new Beat.
+   *
+   * Until now there was no way to create one — the demo project's Beat was the only container
+   * that could ever exist. Sizing comes from the selection's own bounds plus padding, and the
+   * children are rebased into the new container's coordinate space, because React Flow stores
+   * a child's position relative to its parent.
+   */
+  const groupSelection = useCallback(() => {
+    const chosen = (nodes as RFNode[]).filter((n) => n.selected && !isContainer(n));
+    if (chosen.length === 0) return setNote("select the scenes you want to group first");
+    const core = asCore(nodes as RFNode[]);
+    const PAD = 46;
+    const HEAD = 34;
+    const boxes = chosen.map((n) => {
+      const a = absolutePos(n as unknown as GraphNode<DirectorData>, core);
+      const w = n.measured?.width ?? 200;
+      const h = n.measured?.height ?? 90;
+      return { x: a.x, y: a.y, w, h };
+    });
+    const minX = Math.min(...boxes.map((b) => b.x)) - PAD;
+    const minY = Math.min(...boxes.map((b) => b.y)) - PAD - HEAD;
+    const maxX = Math.max(...boxes.map((b) => b.x + b.w)) + PAD;
+    const maxY = Math.max(...boxes.map((b) => b.y + b.h)) + PAD;
+    const id = `beat-${Date.now().toString(36)}`;
+    const container = beat(id, `Beat ${(nodes as RFNode[]).filter(isContainer).length + 1}`, { x: minX, y: minY }, { width: maxX - minX, height: maxY - minY });
+    const chosenIds = new Set(chosen.map((n) => n.id));
+    const next = [
+      ...(nodes as RFNode[]).map((n) => {
+        if (!chosenIds.has(n.id)) return n;
+        const a = absolutePos(n as unknown as GraphNode<DirectorData>, core);
+        return { ...n, parentId: id, position: { x: a.x - minX, y: a.y - minY }, selected: false } as RFNode;
+      }),
+      container as unknown as RFNode,
+    ];
+    setNote(`grouped ${chosen.length} node${chosen.length === 1 ? "" : "s"} into ${container.data.label}`);
+    settle(next, edges, { reparent: false });
+    return undefined;
+  }, [edges, nodes, settle]);
 
   const promote = useCallback(() => {
     const target = selectedContainer();
@@ -380,7 +461,8 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
       <div className="bd-root">
         <div className="bd-toolbar">
           <strong className="bd-brand">🎬 Director</strong>
-          <button type="button" onClick={promote}>Promote Beat</button>
+          <button type="button" onClick={groupSelection}>Group</button>
+          <button type="button" onClick={promote}>Subgraph</button>
           <button type="button" onClick={dissolve}>Dissolve</button>
           <button
             type="button"

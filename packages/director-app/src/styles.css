@@ -205,3 +205,22 @@
 .bd-root .react-flow__controls-button {
   background: #2a2a35; border-bottom: 1px solid var(--bd-line); fill: var(--bd-text);
 }
+
+/* The pin, and the collapsed face it feeds. */
+.bd-nodebar { display: flex; gap: 4px; }
+.bd-pin {
+  background: #2a2a35; border: 1px solid var(--bd-line); border-radius: 6px;
+  cursor: pointer; font-size: 11px; line-height: 1; padding: 3px 6px; filter: grayscale(1); opacity: .7;
+}
+.bd-pin:hover { border-color: #facc15; opacity: 1; }
+.bd-pin.is-on { filter: none; opacity: 1; border-color: #facc15; background: #3a2f10; }
+.bd-node.is-promoted { border-top: 2px solid #facc15; }
+
+.bd-faces { display: flex; flex-direction: column; gap: 3px; flex: 1; padding: 0 .6rem; min-width: 120px; }
+.bd-face {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  background: #16161c; border: 1px solid var(--bd-line); border-left: 2px solid #facc15;
+  border-radius: 5px; padding: .18rem .4rem; font-size: 11px;
+}
+.bd-face-detail { color: #86efac; font-size: 10px; text-transform: uppercase; }
+.bd-faces-empty { color: var(--bd-dim); font-size: 10px; font-style: italic; text-align: center; padding: .3rem 0; }
