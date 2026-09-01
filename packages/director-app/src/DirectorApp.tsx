@@ -283,17 +283,36 @@ function Editor({ calliopeBaseUrl }: DirectorAppProps) {
     const ids = nodeIds ? nodeIds.split(",") : [];
     if (!ids.length) return undefined;
     const kick = () => updateNodeInternals(ids);
+    // A hidden tab suspends ResizeObserver entirely, so the fixed timers below can all fire
+    // into a tab nothing will measure. Keep nudging on a slow interval until every node
+    // reports a size, and again the moment the tab becomes visible — bounded, so a node that
+    // genuinely cannot measure does not keep a timer alive forever.
+    const allMeasured = () => ids.every((id) => !!getInternalNode(id)?.measured?.width);
+    let tries = 0;
+    const iv = setInterval(() => {
+      if (allMeasured() || tries++ > 120) {
+        clearInterval(iv);
+        return;
+      }
+      kick();
+    }, 500);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") kick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     const raf = requestAnimationFrame(kick);
     const timers = [setTimeout(kick, 120), setTimeout(kick, 400), setTimeout(kick, 900)];
     const el = canvasRef.current;
     const ro = el ? new ResizeObserver(() => kick()) : null;
     if (el && ro) ro.observe(el);
     return () => {
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onVisible);
       cancelAnimationFrame(raf);
       for (const t of timers) clearTimeout(t);
       ro?.disconnect();
     };
-  }, [nodeIds, updateNodeInternals]);
+  }, [getInternalNode, nodeIds, updateNodeInternals]);
 
   const config = useMemo(() => resolveConfig(calliopeBaseUrl ? { baseUrl: calliopeBaseUrl } : {}), [calliopeBaseUrl]);
   useEffect(() => {
