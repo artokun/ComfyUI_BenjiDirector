@@ -54,8 +54,8 @@ owns the topology — what is nested in what, and which continuity rails cross w
 
 ## What is next
 
-Calliope bring-up so the whole thing is one install; then the node context menu and a
-prompt-quality pass against Calliope's own templates. One upstream fix is prepared:
+Supervising Calliope from the orchestrator (so `npm run calliope:up` is not even a step),
+then the node context menu and a prompt-quality pass against Calliope's own templates. One upstream fix is prepared:
 Calliope 1.2.1's scene PATCH silently ignores an explicit `null`, so a scene cannot leave
 its Beat — the module detects and reverts that today, and the fix will go up as a PR.
 

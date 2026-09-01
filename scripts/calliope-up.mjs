@@ -143,7 +143,18 @@ async function main() {
   if (!existsSync(marker)) {
     log("installing calliope-backend into the venv (first run takes a few minutes)");
     run(venvPython, ["-m", "pip", "install", "--quiet", "--upgrade", "pip"], backend, true);
-    run(venvPython, ["-m", "pip", "install", "--quiet", "-e", "."], backend);
+    try {
+      run(venvPython, ["-m", "pip", "install", "--quiet", "-e", "."], backend, true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Seen on Windows: pywin32 unpacks a path deep enough to trip MAX_PATH under a long
+      // checkout directory. The default directory is short on purpose; say so.
+      if (/WinError 206|filename or extension is too long/i.test(msg)) {
+        throw new Error(`pip install failed: a file path inside the venv exceeds Windows' MAX_PATH. Use a shorter --dir (the default ${join(homedir(), ".comfyui-mcp", "calliope")} is fine) or enable long paths in Windows.
+${msg}`);
+      }
+      throw err;
+    }
     writeFileSync(marker, new Date().toISOString());
   }
 
