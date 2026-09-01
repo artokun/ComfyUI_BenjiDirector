@@ -1,0 +1,138 @@
+/* Director styles.
+   Scoped under .bd-root so nothing here can leak into ComfyUI's own UI when the bundle is
+   mounted inside the panel — the pane is a direct-DOM child of the page, not an iframe, so
+   a bare `button { }` rule would restyle the whole application. */
+
+.bd-root {
+  --bd-bg: #16161c;
+  --bd-panel: #1e1e26;
+  --bd-line: #33333f;
+  --bd-text: #e6e6ee;
+  --bd-dim: #9ca3af;
+  --bd-accent: #c084fc;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  background: var(--bd-bg);
+  color: var(--bd-text);
+  font: 13px/1.45 Inter, "Segoe UI", system-ui, sans-serif;
+}
+
+.bd-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--bd-line);
+  background: var(--bd-panel);
+  flex-wrap: wrap;
+}
+.bd-brand { color: var(--bd-accent); margin-right: 0.3rem; }
+.bd-toolbar button {
+  background: #2a2a35;
+  color: var(--bd-text);
+  border: 1px solid var(--bd-line);
+  border-radius: 6px;
+  padding: 0.28rem 0.6rem;
+  font: inherit;
+  cursor: pointer;
+}
+.bd-toolbar button:hover { background: #343442; border-color: var(--bd-accent); }
+.bd-sep { width: 1px; height: 18px; background: var(--bd-line); margin: 0 0.3rem; }
+.bd-spacer { flex: 1; }
+.bd-stat { color: var(--bd-dim); }
+.bd-status { font-size: 12px; padding: 0.2rem 0.5rem; border-radius: 999px; border: 1px solid var(--bd-line); }
+.bd-status.is-up { color: #86efac; border-color: #14532d; background: #0f2a19; }
+.bd-status.is-down { color: #fca5a5; border-color: #4a1f1f; background: #2a1414; }
+
+.bd-note {
+  padding: 0.35rem 0.7rem;
+  background: #1b2333;
+  border-bottom: 1px solid var(--bd-line);
+  color: #bfdbfe;
+  font-size: 12px;
+}
+
+.bd-canvas { flex: 1; min-height: 0; }
+
+/* ── nodes ─────────────────────────────────────────────────────────────────── */
+
+.bd-node {
+  background: var(--bd-panel);
+  border: 1px solid var(--bd-line);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  min-width: 200px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+}
+.bd-node.is-selected, .bd-group.is-selected, .bd-collapsed.is-selected { border-color: var(--bd-accent); }
+.bd-node-title { font-weight: 600; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.3rem; }
+.bd-icon { font-size: 14px; }
+.bd-scene { border-left: 3px solid #3b82f6; }
+.bd-asset { border-left: 3px solid #f59e0b; min-width: 150px; }
+.bd-badge {
+  display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  color: #dcfce7; background: #14532d; border-radius: 4px; padding: 0 .3rem; margin-bottom: .3rem;
+}
+
+.bd-ports { display: flex; justify-content: space-between; gap: 1.2rem; }
+.bd-col { display: flex; flex-direction: column; gap: 0.28rem; }
+.bd-col-out { text-align: right; }
+.bd-port { position: relative; font-size: 11px; color: var(--bd-dim); white-space: nowrap; }
+
+/* ── containers ────────────────────────────────────────────────────────────── */
+
+.bd-group {
+  position: relative;
+  background: rgb(192 132 252 / 0.06);
+  border: 1px dashed #6d5a86;
+  border-radius: 12px;
+}
+.bd-subgraph { border-style: solid; border-color: var(--bd-accent); background: rgb(192 132 252 / 0.10); }
+.bd-group-title {
+  position: absolute; top: -0.1rem; left: 0.6rem; transform: translateY(-50%);
+  background: var(--bd-bg); padding: 0 0.4rem; font-weight: 600;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.bd-hint { font-weight: 400; font-size: 11px; color: var(--bd-dim); }
+
+.bd-rail { position: absolute; top: 2rem; display: flex; flex-direction: column; gap: 6px; }
+.bd-rail-in { left: -0.5rem; align-items: flex-start; }
+.bd-rail-out { right: -0.5rem; align-items: flex-end; }
+.bd-pill {
+  position: relative;
+  background: #241a33;
+  border: 1px solid var(--bd-accent);
+  border-radius: 999px;
+  padding: 0.1rem 0.7rem;
+  font-size: 11px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bd-pill.is-pinned { border-style: dashed; }
+.bd-pill.is-pinned::after { content: "📌"; margin-left: 0.3rem; font-size: 9px; }
+
+.bd-collapsed {
+  background: var(--bd-panel);
+  border: 2px solid var(--bd-accent);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  min-width: 240px;
+  min-height: 90px;
+  position: relative;
+}
+.bd-collapsed-body { display: flex; justify-content: space-between; min-height: 40px; margin-top: 0.4rem; }
+.bd-collapsed .bd-rail { position: static; }
+.bd-collapsed .bd-rail-out { align-items: flex-end; }
+
+/* React Flow's own chrome, toned to match. */
+.bd-root .react-flow__controls-button {
+  background: #2a2a35; border-bottom: 1px solid var(--bd-line); fill: var(--bd-text);
+}

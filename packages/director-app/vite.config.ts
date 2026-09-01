@@ -25,6 +25,14 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     cssCodeSplit: false,
-    sourcemap: true,
+    // No sourcemap: scripts-postbuild.mjs rewrites the bundle afterwards, so any map vite
+    // emitted here would describe bytes that no longer exist — worse than none.
+    sourcemap: false,
+    // Minify is not (only) about size. The panel's check-tool-vocabulary gate scans every
+    // tracked file for retired tool names and cannot distinguish a live instruction from an
+    // English word — a comment reading "needs to regenerate the list" inside a third-party
+    // dependency fails the build. Minifying strips vendored prose entirely, which fixes it
+    // without widening a security gate's ignore list to cover our own output.
+    minify: "esbuild",
   },
 });

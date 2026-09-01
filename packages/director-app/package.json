@@ -5,7 +5,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node scripts-postbuild.mjs",
     "dev": "vite build --watch"
   },
   "dependencies": {

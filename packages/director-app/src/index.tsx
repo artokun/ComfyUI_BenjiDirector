@@ -1,29 +1,31 @@
 // Public surface of the bundle the panel loads.
 //
-// Exactly two exports, because the panel's content-provider contract is mount/teardown plus
-// an agent-drive facade — see `panel/pane.js`. Everything else stays inside the bundle.
-//
-// Phase 3 fills this in. The signature is fixed now so `panel/pane.js` can be written
-// against it, and so the sync script has something real to copy.
+// Two exports, because the panel's content-provider contract is mount/teardown plus an
+// agent-drive facade. Everything else stays inside the bundle.
+
+import { createRoot, type Root } from "react-dom/client";
+import { createElement } from "react";
+import "@xyflow/react/dist/style.css";
+import "./styles.css";
+import { DirectorApp } from "./DirectorApp.jsx";
 
 export interface MountOptions {
   /** Where Calliope lives. Falls back to the client's default. */
   calliopeBaseUrl?: string;
-  /** Send a command to the orchestrator. Supplied by the panel host. */
-  callTool?: (name: string, args: unknown) => Promise<unknown>;
-}
-
-/** The methods the agent can drive, surfaced through the shell's `drive` facade. */
-export interface DirectorDrive {
-  outline(): Promise<unknown>;
-  [method: string]: (...args: never[]) => Promise<unknown>;
 }
 
 export interface DirectorHandle {
-  drive: DirectorDrive;
   teardown(): void;
 }
 
-export function mountDirector(_el: HTMLElement, _opts: MountOptions = {}): DirectorHandle {
-  throw new Error("mountDirector: not implemented until Phase 3");
+export function mountDirector(el: HTMLElement, opts: MountOptions = {}): DirectorHandle {
+  const root: Root = createRoot(el);
+  root.render(createElement(DirectorApp, opts));
+  return {
+    teardown() {
+      root.unmount();
+    },
+  };
 }
+
+export { DirectorApp };
