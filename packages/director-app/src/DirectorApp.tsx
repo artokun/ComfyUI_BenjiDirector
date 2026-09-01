@@ -44,7 +44,8 @@ import {
   type GraphEdge,
   type GraphNode,
 } from "@benjidirector/graph-core";
-import { probe, resolveConfig, type ReachabilityState } from "@benjidirector/calliope-client";
+import { CalliopeClient, probe, resolveConfig, type ReachabilityState, type Schemas } from "@benjidirector/calliope-client";
+import { projectToGraph } from "./calliope-bind.js";
 import { ActionsContext, type EditorActions } from "./actions.js";
 import {
   blueprintIdFromName,
@@ -253,6 +254,8 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
   const [note, setNote] = useState("");
   const [palette, setPalette] = useState<PaletteState | null>(null);
   const [blueprints, setBlueprints] = useState<Record<string, Blueprint>>(() => loadBlueprints());
+  const [projects, setProjects] = useState<Schemas["Project"][]>([]);
+  const [loadedProject, setLoadedProject] = useState<number | null>(null);
 
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
@@ -320,13 +323,18 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
   }, [getInternalNode, nodeIds, updateNodeInternals]);
 
   const config = useMemo(() => resolveConfig(calliopeBaseUrl ? { baseUrl: calliopeBaseUrl } : {}), [calliopeBaseUrl]);
+  const client = useMemo(() => new CalliopeClient(config), [config]);
   useEffect(() => {
     let live = true;
-    probe(config).then((s) => live && setStatus(s));
+    probe(config).then((s) => {
+      if (!live) return;
+      setStatus(s);
+      if (s.reachable) client.projects.list().then((ps) => live && setProjects(ps)).catch(() => undefined);
+    });
     return () => {
       live = false;
     };
-  }, [config]);
+  }, [client, config]);
 
   /** Bring the graph back to a consistent state. Order is not interchangeable. */
   const settle = useCallback(
@@ -437,6 +445,44 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
   // A drag already landed in state before we see it, so recording it would undo to the same
   // place. Undo covers structural edits, not raw node moves.
   const onNodeDragStop = useCallback(() => withCurrent((ns, es) => settle(ns, es), { history: false }), [settle, withCurrent]);
+
+  /**
+   * Load a Calliope project onto the canvas.
+   *
+   * Replaces the graph wholesale — a project is a different film, not an edit to this one —
+   * and clears undo, because undoing across a load would restore a graph whose ids belong to
+   * another project's rows. Beats are loaded as plain groups; promoting is the user's (or the
+   * agent's) call, and reconcile derives the rails from the wires Calliope already knows.
+   */
+  const loadProject = useCallback(
+    async (projectId: number | null) => {
+      if (projectId === null) {
+        const p = demoProject();
+        const done = decorate(asRF(p.nodes as GraphNode<DirectorData>[]), asRFEdges(p.edges));
+        history.current = [];
+        future.current = [];
+        setNodes(done.nodes);
+        setEdges(done.edges);
+        setLoadedProject(null);
+        setNote("demo project");
+        return;
+      }
+      try {
+        const [story, scenesRes] = await Promise.all([client.story.get(projectId), client.scenes.list(projectId)]);
+        const g = projectToGraph({ story, scenes: scenesRes.scenes });
+        const done = decorate(asRF(g.nodes as GraphNode<DirectorData>[]), asRFEdges(g.edges));
+        history.current = [];
+        future.current = [];
+        setNodes(sortParentsFirst(asCore(done.nodes)) as unknown as RFNode[]);
+        setEdges(done.edges);
+        setLoadedProject(projectId);
+        setNote(`loaded “${story.project.title}” — ${story.beats.length} beats, ${scenesRes.scenes.length} scenes, ~${scenesRes.estimated_duration_sec}s`);
+      } catch (err) {
+        setNote(`could not load project ${projectId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+    [client, setEdges, setNodes],
+  );
 
   /** Canvas-relative menu coordinates. `fixed` would resolve against the panel's transform. */
   const canvasPoint = useCallback((clientX: number, clientY: number) => {
@@ -1253,6 +1299,21 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
                 {beats.length} beat{beats.length === 1 ? "" : "s"} · {promoted} promoted
               </span>
               <span className="bd-spacer" />
+              {status?.reachable ? (
+                <select
+                  className="bd-project"
+                  value={loadedProject ?? ""}
+                  title="Which Calliope project the canvas shows"
+                  onChange={(e) => void loadProject(e.target.value === "" ? null : Number(e.target.value))}
+                >
+                  <option value="">demo project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <span className={`bd-status ${status?.reachable ? "is-up" : "is-down"}`}>
                 {status === null ? "checking Calliope…" : status.reachable ? `Calliope ${status.health.version ?? "ok"}` : `Calliope unreachable — ${status.reason}`}
               </span>

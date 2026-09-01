@@ -330,3 +330,9 @@
 .bd-face-value { font-size: 10px; min-width: 24px; text-align: center; color: var(--bd-text); }
 .bd-face-input { background: #16161c; color: var(--bd-text); border: 1px solid var(--bd-accent); border-radius: 4px; font: inherit; font-size: 11px; padding: 0 .25rem; width: 120px; }
 .bd-face-icon { font-size: 12px; }
+
+.bd-project {
+  background: #2a2a35; color: var(--bd-text); border: 1px solid var(--bd-line); border-radius: 6px;
+  font: inherit; font-size: 12px; padding: .22rem .4rem; max-width: 220px;
+}
+.bd-project:focus { outline: none; border-color: var(--bd-accent); }
