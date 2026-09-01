@@ -13,6 +13,9 @@ frontend. Calliope owns the content — projects, beats, scenes, characters, job
 owns the topology — what is nested in what, and which continuity rails cross which boundary.
 
 > **Status: WIP.** Nothing here is installable yet. See `docs/diagrams/` for the approach.
+>
+> Setup is a first-class goal, not an afterthought: the target is that a user installs the
+> panel and this works, without hand-assembling a Python venv to get there.
 
 ## Layout
 
@@ -45,10 +48,17 @@ To try it against a local panel checkout:
 node scripts/sync-to-panel.mjs --panel ../comfyui-mcp-panel
 ```
 
-## Contributing
+## Who builds this
 
-Issues and PRs welcome — this repo exists so the Calliope side can be worked on by the people
-who know Calliope. Two things worth knowing before a first PR:
+We do. This is a full build on our side — Calliope is used as-is, through its public API,
+and the integration work does not ask anything of the Calliope maintainers.
+
+What we *do* want from that side is correction: if this module drives Calliope in a way that
+is wrong, unidiomatic, or about to be broken by an upcoming change, an issue saying so is
+worth more than a PR. If we need something Calliope does not expose, we open the PR upstream
+ourselves rather than forking or patching around it.
+
+Two things worth knowing before touching the code:
 
 - **`graph-core` is the part with teeth.** It has real tests and they are mutation-checked.
   Change behaviour there and expect a test to go red; if none does, the test is the bug.
