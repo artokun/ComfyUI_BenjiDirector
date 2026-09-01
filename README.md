@@ -12,10 +12,35 @@ used headless: we drive its HTTP API and render our own editor rather than embed
 frontend. Calliope owns the content — projects, beats, scenes, characters, jobs. This module
 owns the topology — what is nested in what, and which continuity rails cross which boundary.
 
-> **Status: WIP.** Nothing here is installable yet. See `docs/diagrams/` for the approach.
+> **Status: working prototype, not yet released.** The editor runs live inside the ComfyUI
+> agent panel and the agent can drive it end to end; Calliope binding is next. See
+> `docs/diagrams/` for the approach and the sections below for what exists today.
 >
 > Setup is a first-class goal, not an afterthought: the target is that a user installs the
 > panel and this works, without hand-assembling a Python venv to get there.
+
+## What works today
+
+- **The canvas** (`packages/director-app`): Scenes, Character/Location/Item assets, and Beats
+  as groups or subgraphs. Typed wires (text / ref / image / video), rails you can rename,
+  reorder and author from a `+` slot, the yellow pin that puts a node on a collapsed Beat's
+  face as a compact control, colours, resizable containers, a searchable right-click palette,
+  pick-up-and-carry wires with drop-to-palette auto-wiring, edge midpoint menus (insert /
+  delete / reroute-TBD), blueprints (save a subgraph, stamp copies), undo/redo, repair.
+- **The agent path**: `mountDirector().drive(name, args)` runs the mouse's own code for every
+  command — the editor mints ids and refuses type mismatches. In comfyui-mcp
+  (`feat/benjidirector-seam`), `panel_module` opens the pane, which MOUNTS
+  `panel_director_graph` / `panel_director_link` / `panel_director_subgraph`; closing it
+  unmounts them and the client is told the tool list changed. The panel pushes
+  `pane_state` on open / switch / close and on reconnect. `panel_pane` reads, closes and docks
+  whichever pane is showing.
+- **The algebra** (`packages/graph-core`): promote / dissolve / reconcile with derived boundary
+  ids, 49 tests, mutation-checked.
+
+## What is next
+
+Binding the graph to Calliope's data (projects → beats → scenes) with the topology sidecar,
+then the five Calliope tools, then Calliope bring-up so the whole thing is one install.
 
 ## Layout
 
