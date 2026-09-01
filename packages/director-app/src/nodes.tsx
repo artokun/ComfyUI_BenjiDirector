@@ -46,7 +46,7 @@ import {
 
 export const PILL_H = 24;
 export const PILL_GAP = 6;
-const PILL_MAX_CHARS = 14;
+const PILL_MAX_CHARS = 22;
 const PILL_MIN_CHARS = 3;
 
 const ACCENT = "#c084fc";
