@@ -570,9 +570,18 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
     return (
       <div
         className={`bd-collapsed${pill ? " is-pill" : ""}${selected ? " is-selected" : ""}`}
-        style={{ width: "100%", height: pill ? "auto" : "100%", borderColor: tint, background: `color-mix(in srgb, ${tint} 10%, #1e1e26)` }}
+        style={{ width: "100%", height: "auto", borderColor: tint, background: `color-mix(in srgb, ${tint} 10%, #1e1e26)` }}
       >
-        <NodeResizer minWidth={240} minHeight={80} isVisible={!!selected && !pill} color={tint} />
+        {/* Width only: a collapsed card is content-height by definition. The width the user
+            chooses here is remembered as the card's own, separate from the expanded box. */}
+        <NodeResizer
+          minWidth={200}
+          minHeight={1}
+          isVisible={!!selected}
+          color={tint}
+          shouldResize={(_e, p) => p.direction[1] === 0}
+          onResizeEnd={(_e, p) => actions?.updateNode(id, { collapsedWidth: Math.round(p.width) })}
+        />
         <ContainerToolbar id={id} isSubgraph collapsed visible={!!selected} color={d.color} />
         <div className="bd-collapsed-head">
           <RailHub containerId={id} side="in" ports={d.promotedIn} tint={tint} />

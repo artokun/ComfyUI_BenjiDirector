@@ -76,11 +76,12 @@ describe("topology sidecar", () => {
     expect((out.data as BeatData).expandedWidth).toBe(559);
     expect((out.data as BeatData).expandedHeight).toBe(358);
 
-    // Resized while collapsed: that size is the card's and is applied as the node size.
-    const resized = { ...collapsed, width: 300, height: 120, data: { ...collapsed.data, collapsedWidth: 300, collapsedHeight: 120 } } as N;
+    // Resized while collapsed: the WIDTH is the card's own and comes back; a collapsed Beat
+    // never takes a height, whatever a stale node carried.
+    const resized = { ...collapsed, width: 300, height: 120, data: { ...collapsed.data, collapsedWidth: 300 } } as N;
     const topo2 = captureTopology([resized]);
     const out2 = applyTopology([fresh], [], topo2, directorHost).nodes[0]!;
-    expect([out2.width, out2.height]).toEqual([300, 120]);
+    expect([out2.width, out2.height]).toEqual([300, undefined]);
   });
 
   it("a sidecar naming a Beat that no longer exists is ignored, not applied to thin air", () => {

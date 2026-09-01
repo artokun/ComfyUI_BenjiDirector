@@ -997,15 +997,15 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
             // one in and stash the other, or expanding lands you on a card-sized Beat.
             const out = { ...n, data: { ...d, collapsed: collapsing } } as RFNode;
             if (collapsing) {
+              // A collapsed Beat is content-height — a pill, or a header plus its pinned
+              // widgets — so it never takes a height. It takes a width only if the user gave
+              // it one while collapsed (the card's own resizer records collapsedWidth).
               (out.data as BeatData).expandedWidth = n.width;
               (out.data as BeatData).expandedHeight = n.height;
               if (d.collapsedWidth) out.width = d.collapsedWidth;
               else delete out.width;
-              if (d.collapsedHeight) out.height = d.collapsedHeight;
-              else delete out.height;
+              delete out.height;
             } else {
-              (out.data as BeatData).collapsedWidth = n.width;
-              (out.data as BeatData).collapsedHeight = n.height;
               out.width = d.expandedWidth ?? d.width ?? 460;
               out.height = d.expandedHeight ?? d.height ?? 380;
             }

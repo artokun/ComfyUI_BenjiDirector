@@ -21,8 +21,8 @@ export interface BeatTopology {
   height?: number;
   expandedWidth?: number;
   expandedHeight?: number;
+  /** Only if the user resized the collapsed card; a collapsed Beat never stores a height. */
   collapsedWidth?: number;
-  collapsedHeight?: number;
   /** rail id → the label the user gave it. */
   railLabels: Record<string, string>;
 }
@@ -62,7 +62,6 @@ export function captureTopology(nodes: readonly GraphNode<DirectorData>[]): Proj
       ...(d.expandedWidth ? { expandedWidth: d.expandedWidth } : {}),
       ...(d.expandedHeight ? { expandedHeight: d.expandedHeight } : {}),
       ...(d.collapsedWidth ? { collapsedWidth: d.collapsedWidth } : {}),
-      ...(d.collapsedHeight ? { collapsedHeight: d.collapsedHeight } : {}),
       railLabels,
     };
   }
@@ -90,8 +89,9 @@ export function applyTopology(
     // resized it while collapsed, otherwise none so the card sizes itself — and the expanded
     // box waits in data for the next expand. Expanded: the node's size is the box.
     const { width: _w, height: _h, ...bare } = n;
+    // Never a height while collapsed: the card is content-height by definition.
     const sized = t.collapsed
-      ? { ...bare, ...(t.collapsedWidth ? { width: t.collapsedWidth } : {}), ...(t.collapsedHeight ? { height: t.collapsedHeight } : {}) }
+      ? { ...bare, ...(t.collapsedWidth ? { width: t.collapsedWidth } : {}) }
       : { ...bare, ...(t.width ? { width: t.width } : {}), ...(t.height ? { height: t.height } : {}) };
     return {
       ...sized,
@@ -103,7 +103,6 @@ export function applyTopology(
         ...(t.collapsed && t.width ? { expandedWidth: t.width } : t.expandedWidth ? { expandedWidth: t.expandedWidth } : {}),
         ...(t.collapsed && t.height ? { expandedHeight: t.height } : t.expandedHeight ? { expandedHeight: t.expandedHeight } : {}),
         ...(t.collapsedWidth ? { collapsedWidth: t.collapsedWidth } : {}),
-        ...(t.collapsedHeight ? { collapsedHeight: t.collapsedHeight } : {}),
       },
     } as GraphNode<DirectorData>;
   });
