@@ -24,6 +24,18 @@ export const PORT_COLOR: Record<DirectorPortType, string> = {
   video: "#22c55e",
 };
 
+/** Container tints. Eight is enough to tell Beats apart at a glance and few enough to pick. */
+export const GROUP_PRESET_COLORS = [
+  "#c084fc",
+  "#60a5fa",
+  "#34d399",
+  "#f59e0b",
+  "#f472b6",
+  "#f87171",
+  "#a3e635",
+  "#22d3ee",
+];
+
 /** A Scene node's payload. Mirrors the fields Calliope actually stores on `scenes`. */
 export interface SceneData extends BaseNodeData {
   kind: "scene";
@@ -57,18 +69,29 @@ export interface AssetData extends BaseNodeData {
 /** One row on a collapsed Beat's face: a descendant its author pinned. */
 export interface PromotedFace {
   id: string;
+  kind: "scene" | "asset";
   label: string;
-  detail?: string;
+  durationSec?: number;
+  videoPath?: string;
+  assetKind?: AssetData["asset"];
 }
 
 export interface BeatData extends BaseNodeData, ContainerNodeData {
   kind: "beat";
   /** Derived every settle from pinned descendants — never edited directly. */
   faces?: PromotedFace[];
+  /** The expanded box, remembered while collapsed so expanding restores it. */
+  expandedWidth?: number;
+  expandedHeight?: number;
+  /** The collapsed card's box, remembered while expanded. */
+  collapsedWidth?: number;
+  collapsedHeight?: number;
 }
 
 export type DirectorData = SceneData | AssetData | BeatData;
 export type DirectorNode = GraphNode<DirectorData>;
+
+export type NodeKind = "scene" | "character" | "location" | "item";
 
 const p = (
   nodeId: string,
@@ -100,6 +123,11 @@ export const scenePorts = (id: string): PortInfo[] => [
 
 export const assetPorts = (id: string): PortInfo[] => [p(id, "out", "REF", "ref")];
 
+/** Rebuild a node's ports for a NEW id — used when a blueprint is instantiated. */
+export function reportedPorts(kind: DirectorData["kind"], id: string): PortInfo[] {
+  return kind === "scene" ? scenePorts(id) : kind === "asset" ? assetPorts(id) : [];
+}
+
 export const scene = (
   id: string,
   heading: string,
@@ -111,7 +139,7 @@ export const scene = (
   type: "scene",
   position,
   ...(parentId ? { parentId } : {}),
-  data: { kind: "scene", label: heading, heading, ports: scenePorts(id), ...extra },
+  data: { kind: "scene", label: heading, heading, durationSec: 5, ports: scenePorts(id), ...extra },
 });
 
 export const asset = (
@@ -150,6 +178,13 @@ export const beat = (
   },
 });
 
+/** Make a node of a palette kind at a position. One place, so every entry point agrees. */
+export function makeNode(kind: NodeKind, at: { x: number; y: number }, stamp = Date.now().toString(36)): DirectorNode {
+  if (kind === "scene") return scene(`sc-${stamp}`, "New scene", at);
+  const label = kind === "character" ? "New character" : kind === "location" ? "New location" : "New item";
+  return asset(`${kind}-${stamp}`, label, kind, at);
+}
+
 /** What graph-core needs from us, and nothing else. */
 export const directorHost: GraphOpsHost = {
   portsOf: (n, side) => {
@@ -184,10 +219,10 @@ export function demoProject(): { nodes: DirectorNode[]; edges: GraphEdge[] } {
     asset("loc-rooftop", "Rooftop, night", "location", { x: 40, y: 190 }),
 
     beat("beat-1", "Beat 1 — The approach", { x: 340, y: 40 }),
-    scene("sc-01", "SC-01 · Nadia climbs out", { x: 40, y: 60 }, {}, "beat-1"),
-    scene("sc-02", "SC-02 · She sees the city", { x: 40, y: 220 }, {}, "beat-1"),
+    scene("sc-01", "SC-01 · Nadia climbs out", { x: 40, y: 60 }, { durationSec: 6 }, "beat-1"),
+    scene("sc-02", "SC-02 · She sees the city", { x: 40, y: 220 }, { durationSec: 4 }, "beat-1"),
 
-    scene("sc-03", "SC-03 · The call comes", { x: 900, y: 300 }),
+    scene("sc-03", "SC-03 · The call comes", { x: 900, y: 300 }, { durationSec: 8 }),
   ];
 
   const edges: GraphEdge[] = [

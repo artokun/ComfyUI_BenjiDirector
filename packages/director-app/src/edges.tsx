@@ -1,0 +1,101 @@
+// The edge, and what you can do to it from the middle.
+//
+// Hover a wire and a control appears at its midpoint; click it for insert / delete / reroute.
+// The midpoint lives INSIDE the edge's own SVG group, not in the label portal, so the parent
+// `.react-flow__edge:hover` rule can reveal it — the label renderer portals its children into
+// a separate HTML layer where the hover state of the path is invisible. The menu, which does
+// need real buttons, goes through the portal once it is open.
+
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+
+export interface EdgeActions {
+  deleteEdge(edgeId: string): void;
+  /** Insert a scene on this wire at the given flow position, splicing it in if the types allow. */
+  insertOnEdge(edgeId: string, at: { x: number; y: number }): void;
+}
+export const EdgeActionsContext = createContext<EdgeActions | null>(null);
+
+export function DirectorEdge(props: EdgeProps) {
+  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, markerEnd } = props;
+  const actions = useContext(EdgeActionsContext);
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const [path, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+
+  // Close on any click that is not inside the menu. Registered only while open, so the
+  // document does not carry one listener per edge on the canvas.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc, true);
+    return () => document.removeEventListener("mousedown", onDoc, true);
+  }, [open]);
+
+  const stroke = (style as { stroke?: string } | undefined)?.stroke ?? "#9ca3af";
+
+  return (
+    <>
+      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} interactionWidth={18} />
+      <g
+        className={`bd-edge-mid${open ? " is-open" : ""}`}
+        transform={`translate(${labelX}, ${labelY})`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <circle r={9} fill="#1e1e26" stroke={stroke} strokeWidth={2} />
+        <text y={4} textAnchor="middle" fontSize={12} fontWeight={700} fill={stroke}>
+          ⋯
+        </text>
+      </g>
+      {open ? (
+        <EdgeLabelRenderer>
+          <div
+            ref={menuRef}
+            className="bd-edge-menu nodrag nopan"
+            style={{ transform: `translate(-50%, 12px) translate(${labelX}px, ${labelY}px)` }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                actions?.insertOnEdge(id, { x: labelX, y: labelY });
+              }}
+            >
+              ＋ Insert node
+            </button>
+            <button
+              type="button"
+              className="is-danger"
+              onClick={() => {
+                setOpen(false);
+                actions?.deleteEdge(id);
+              }}
+            >
+              ✕ Delete
+            </button>
+            <button type="button" disabled title="Reroute — coming later">
+              ↪ Reroute
+              <span className="bd-tbd">TBD</span>
+            </button>
+          </div>
+        </EdgeLabelRenderer>
+      ) : null}
+    </>
+  );
+}
+
+export const edgeTypes = { director: DirectorEdge };
