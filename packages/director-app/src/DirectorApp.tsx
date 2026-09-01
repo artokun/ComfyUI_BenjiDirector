@@ -554,7 +554,10 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
         history.current = [];
         future.current = [];
         loadedProjectRef.current = projectId;
-        settle(asRF(sortParentsFirst(laid.nodes)), asRFEdges(laid.edges), { sync: false, railLabels: laid.railLabels });
+        // reparent:false — a scene's Beat is what Calliope says it is. Re-parenting by geometry
+        // here would silently disagree with the row (a scene whose box overlaps a Beat it has
+        // left), and nothing would ever write that disagreement back.
+        settle(asRF(sortParentsFirst(laid.nodes)), asRFEdges(laid.edges), { sync: false, reparent: false, railLabels: laid.railLabels });
         setLoadedProject(projectId);
         setNote(`loaded “${story.project.title}” — ${story.beats.length} beats, ${scenesRes.scenes.length} scenes, ~${scenesRes.estimated_duration_sec}s`);
       } catch (err) {

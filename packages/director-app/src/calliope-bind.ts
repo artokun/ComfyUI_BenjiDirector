@@ -64,6 +64,11 @@ const BEAT_W = 460;
 const SCENE_Y0 = 60;
 const SCENE_GAP = 160;
 const BEAT_PAD_BOTTOM = 60;
+/** The smallest footprint a scene card can have — what "inside the box" is measured with. */
+const SCENE_MIN_W = 120;
+const SCENE_MIN_H = 60;
+/** A relative y above this would put the card on the Beat's title bar. */
+const SCENE_TOP_MIN = 30;
 
 const link = (source: string, sourceHandle: string, target: string, targetHandle: string): GraphEdge => ({
   id: `lg:${sourceHandle}->${targetHandle}`,
@@ -103,13 +108,29 @@ export function projectToGraph(data: CalliopeProjectData): { nodes: DirectorNode
     else orphans.push(s);
   }
 
+  // A stored position is only as good as the row it was written against. Relative to a Beat
+  // it must land inside that Beat's box; absolute at the top level it must not sit on top of
+  // a Beat it does not belong to (that is how a scene ends up re-parented by geometry on the
+  // next settle and the canvas quietly disagrees with the row). Anything else takes the slot.
+  const beatBox = new Map<string, { x: number; y: number; w: number; h: number }>();
   const placeScene = (s: SceneRow, fallback: { x: number; y: number }, parentId?: string) => {
     const ds = directorSettings(s);
+    let position = fallback;
+    if (ds.position) {
+      const p = ds.position;
+      if (parentId) {
+        const box = beatBox.get(parentId);
+        if (box && p.x >= 0 && p.y >= SCENE_TOP_MIN && p.x <= box.w - SCENE_MIN_W && p.y <= box.h - SCENE_MIN_H) position = p;
+      } else {
+        const overlaps = [...beatBox.values()].some((b) => p.x + SCENE_MIN_W > b.x && p.x < b.x + b.w && p.y + SCENE_MIN_H > b.y && p.y < b.y + b.h);
+        if (!overlaps) position = p;
+      }
+    }
     nodes.push(
       scene(
         calId.scene(s.id),
         s.heading || `Scene ${s.order_index + 1}`,
-        ds.position ?? fallback,
+        position,
         {
           orderIndex: s.order_index,
           action: s.action ?? undefined,
@@ -126,8 +147,14 @@ export function projectToGraph(data: CalliopeProjectData): { nodes: DirectorNode
     const inside = byBeat.get(b.id) ?? [];
     const height = SCENE_Y0 + Math.max(inside.length, 1) * SCENE_GAP + BEAT_PAD_BOTTOM;
     const id = calId.beat(b.id);
-    nodes.push(beat(id, b.title, { x: BEAT_X0 + i * BEAT_GAP, y: 40 }, { width: BEAT_W, height }));
-    inside.forEach((s, j) => placeScene(s, { x: 40, y: SCENE_Y0 + j * SCENE_GAP }, id));
+    const pos = { x: BEAT_X0 + i * BEAT_GAP, y: 40 };
+    beatBox.set(id, { ...pos, w: BEAT_W, h: height });
+    nodes.push(beat(id, b.title, pos, { width: BEAT_W, height }));
+  });
+  // Scenes after every Beat box is known, so an orphan can be checked against all of them.
+  beats.forEach((b) => {
+    const id = calId.beat(b.id);
+    (byBeat.get(b.id) ?? []).forEach((s, j) => placeScene(s, { x: 40, y: SCENE_Y0 + j * SCENE_GAP }, id));
   });
   orphans.forEach((s, j) => placeScene(s, { x: BEAT_X0 + beats.length * BEAT_GAP, y: 60 + j * SCENE_GAP }));
 

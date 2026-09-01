@@ -79,6 +79,30 @@ describe("projectToGraph", () => {
     expect((n.data as { promoted?: boolean }).promoted).toBe(true);
   });
 
+  it("a stored Beat-relative position outside the Beat's box takes the slot instead", () => {
+    // (418, 78) is where an absolute position ends up when it is written while the scene is
+    // in a Beat at (340, 40) — outside a 460-wide box. Honouring it would draw the card off
+    // the Beat while the row says it is in it.
+    const g2 = projectToGraph({ story, scenes: [sceneRow(1, 0, 1, { video_settings: { director: { position: { x: 418, y: 78 } } } })] });
+    const n = g2.nodes.find((x) => x.id === "cal-sc-1")!;
+    expect(n.parentId).toBe("cal-beat-1");
+    expect(n.position).toEqual({ x: 40, y: 60 });
+    // A negative or title-bar y is just as wrong.
+    const g3 = projectToGraph({ story, scenes: [sceneRow(1, 0, 1, { video_settings: { director: { position: { x: 40, y: 4 } } } })] });
+    expect(g3.nodes.find((x) => x.id === "cal-sc-1")!.position).toEqual({ x: 40, y: 60 });
+  });
+
+  it("an orphan scene whose absolute position sits on a Beat it is not in is moved to the loose column", () => {
+    // Beat 1's box is (340,40)-(800,…); (442,113) is inside it, but the row says no Beat.
+    const g2 = projectToGraph({ story, scenes: [sceneRow(2, 1, null, { video_settings: { director: { position: { x: 442, y: 113 } } } })] });
+    const n = g2.nodes.find((x) => x.id === "cal-sc-2")!;
+    expect(n.parentId).toBeUndefined();
+    expect(n.position.x).toBeGreaterThanOrEqual(340 + 2 * 560);
+    // Clear of every Beat, an orphan keeps its stored spot.
+    const g3 = projectToGraph({ story, scenes: [sceneRow(2, 1, null, { video_settings: { director: { position: { x: 40, y: 700 } } } })] });
+    expect(g3.nodes.find((x) => x.id === "cal-sc-2")!.position).toEqual({ x: 40, y: 700 });
+  });
+
   it("is deterministic — the same rows lay out the same way twice", () => {
     expect(projectToGraph({ story, scenes })).toEqual(projectToGraph({ story, scenes }));
   });
