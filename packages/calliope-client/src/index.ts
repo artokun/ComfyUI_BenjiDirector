@@ -73,3 +73,6 @@ export async function probe(config: CalliopeConfig): Promise<ReachabilityState> 
     clearTimeout(timer);
   }
 }
+
+export * from "./client.js";
+export * from "./events.js";
