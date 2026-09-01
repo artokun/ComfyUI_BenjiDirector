@@ -58,6 +58,8 @@ export interface PortInfo {
   id: string;
   type: PortTypeId;
   isInput: boolean;
+  /** Human-readable name. Becomes a boundary port's initial rail label when promoted. */
+  label: string;
 }
 
 /**
@@ -112,6 +114,22 @@ export interface GraphEdge {
   target: string;
   sourceHandle?: string | null;
   targetHandle?: string | null;
+  /** Passed through untouched. The ops only ever set it on generated relay edges. */
+  style?: Record<string, unknown>;
+}
+
+/**
+ * What the ops need to know about the host's domain, and nothing more.
+ *
+ * `portsOf` is the seam that replaced ifr-node-lab's `BenchNode.inputs` / `.outputs`. Our
+ * nodes are projections of Calliope rows rather than engine instances, so the host answers
+ * what ports a node has instead of the node carrying them.
+ */
+export interface GraphOpsHost {
+  /** Ports on a NON-container node. Containers are handled by their promoted rails. */
+  portsOf(node: GraphNode<never>, side: "in" | "out"): readonly PortInfo[];
+  /** Optional per-type styling for generated relay edges, replacing IFR's `PORT_COLOR`. */
+  edgeStyle?(type: PortTypeId): Record<string, unknown> | undefined;
 }
 
 export type AnyGraphNode = GraphNode<BaseNodeData | ContainerNodeData>;
