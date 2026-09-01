@@ -69,8 +69,10 @@ const bundleHash = createHash("sha256")
   .digest("hex")
   .slice(0, 12);
 
-for (const f of [...files, "pane.js"]) {
-  const src = f === "pane.js" ? join(ROOT, "panel", "pane.js") : join(built, f);
+// calliope-up.mjs rides along so the orchestrator can run Calliope's bring-up from the
+// installed panel — one script, one owner, no copy to drift.
+for (const f of [...files, "pane.js", "calliope-up.mjs"]) {
+  const src = f === "pane.js" ? join(ROOT, "panel", "pane.js") : f === "calliope-up.mjs" ? join(ROOT, "scripts", "calliope-up.mjs") : join(built, f);
   const out = join(dest, f);
   let body = readFileSync(src);
   if (f === "pane.js") body = Buffer.from(body.toString("utf8").replace(/__BUNDLE_HASH__/g, bundleHash));
