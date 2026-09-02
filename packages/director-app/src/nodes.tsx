@@ -36,6 +36,7 @@ import { useActions } from "./actions.js";
 import { FaceRow } from "./faces.jsx";
 import { ACCENT, ContainerToolbar } from "./container-toolbar.jsx";
 import { Icon } from "./icons.js";
+import { LeafResizeGrip } from "./leaf-resize.jsx"; // [U1]
 import { RenderBadge } from "./render-badge.jsx";
 import { BYPASS_TITLE, headerHandleLayout, leafClassName, leafStyle } from "./node-chrome.js";
 import { LeafCaret, LeafHub, LeafInfo, LeafToolbar, useLeafInternals } from "./node-chrome.jsx";
@@ -125,6 +126,8 @@ export function SceneNode({ id, data, selected }: NodeProps) {
           </div>
         </>
       )}
+      {/* [U1] the resize grip; [U2] a collapsed leaf is header-only, so there is nothing to size. */}
+      {collapsed ? null : <LeafResizeGrip />}
     </div>
   );
 }
@@ -161,6 +164,7 @@ export function AssetNode({ id, data, selected }: NodeProps) {
           ))}
         </div>
       )}
+      {collapsed ? null : <LeafResizeGrip />}
     </div>
   );
 }

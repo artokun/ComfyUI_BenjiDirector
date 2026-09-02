@@ -85,6 +85,9 @@ import { summarizeEdge, summarizeNode } from "./outline.js";
 import { usePanels } from "./panels.js";
 import { Slot } from "./slots.jsx";
 import { PALETTE_KINDS } from "./model.js";
+// ── [U1] stability: measurement kick + z-order ──
+import { KICK_INTERVAL_MS, KICK_MAX_TICKS, unmeasuredIds, visibleIdKey } from "./stability.js";
+import { applyZOrder, needsZOrder } from "./z-order.js";
 
 // React Flow types node data as an index signature; ours are interfaces. Identical at runtime,
 // so the casts stay confined to these aliases.
@@ -301,51 +304,83 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   const { screenToFlowPosition, getInternalNode } = useReactFlow();
 
   /**
-   * Force React Flow to measure.
+   * Force React Flow to measure — only what it CAN measure, and only until it has.
    *
    * The pane mounts inside the side panel's overlay while it is sliding in, and React Flow's
    * own ResizeObserver pass does not land in that window: nodes keep `visibility: hidden`
    * (its marker for "not measured"), and because an edge only renders once BOTH endpoints are
    * measured, the canvas comes up with nodes you cannot see and no wires at all.
    * `updateNodeInternals` re-reads dimensions and handle bounds straight from the DOM.
+   *
+   * [U1] Keyed on the SET of visible ids, not the node list. React Flow never measures a
+   * hidden node, so a kick that waited for EVERY node to report a size could not finish while
+   * a Beat was collapsed — and it re-armed on each node-list change: a 60 s interval that
+   * force-remeasured every node and every handle on the canvas, which is what "dragging locks
+   * the tab up" was. Now nothing is armed when everything visible is already measured, a kick
+   * names only the unmeasured nodes, and everything stops the moment the last one measures.
    */
   const updateNodeInternals = useUpdateNodeInternals();
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const nodeIds = useMemo(() => (nodes as RFNode[]).map((n) => n.id).join(","), [nodes]);
+  const visibleIds = useMemo(() => visibleIdKey(nodes as RFNode[]), [nodes]);
   useEffect(() => {
-    const ids = nodeIds ? nodeIds.split(",") : [];
+    const ids = visibleIds ? visibleIds.split(",") : [];
     if (!ids.length) return undefined;
-    const kick = () => updateNodeInternals(ids);
-    // A hidden tab suspends ResizeObserver entirely, so the fixed timers below can all fire
-    // into a tab nothing will measure. Keep nudging on a slow interval until every node
-    // reports a size, and again the moment the tab becomes visible — bounded, so a node that
-    // genuinely cannot measure does not keep a timer alive forever.
-    const allMeasured = () => ids.every((id) => !!getInternalNode(id)?.measured?.width);
-    let tries = 0;
-    const iv = setInterval(() => {
-      if (allMeasured() || tries++ > 120) {
-        clearInterval(iv);
-        return;
-      }
-      kick();
-    }, 500);
+    const isMeasured = (id: string) => !!getInternalNode(id)?.measured?.width;
+    const pending = () => unmeasuredIds(ids, isMeasured);
+    if (!pending().length) return undefined;
+    let stopped = false;
+    let ticks = 0;
+    let raf = 0;
+    let iv: ReturnType<typeof setInterval> | undefined;
+    let ro: ResizeObserver | null = null;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     const onVisible = () => {
       if (document.visibilityState === "visible") kick();
     };
-    document.addEventListener("visibilitychange", onVisible);
-    const raf = requestAnimationFrame(kick);
-    const timers = [setTimeout(kick, 120), setTimeout(kick, 400), setTimeout(kick, 900)];
-    const el = canvasRef.current;
-    const ro = el ? new ResizeObserver(() => kick()) : null;
-    if (el && ro) ro.observe(el);
-    return () => {
-      clearInterval(iv);
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      if (iv !== undefined) clearInterval(iv);
       document.removeEventListener("visibilitychange", onVisible);
       cancelAnimationFrame(raf);
       for (const t of timers) clearTimeout(t);
       ro?.disconnect();
     };
-  }, [getInternalNode, nodeIds, updateNodeInternals]);
+    const kick = () => {
+      if (stopped) return;
+      const left = pending();
+      if (!left.length) {
+        stop();
+        return;
+      }
+      updateNodeInternals(left);
+    };
+    raf = requestAnimationFrame(kick);
+    timers.push(setTimeout(kick, 120), setTimeout(kick, 400), setTimeout(kick, 900));
+    // A hidden tab suspends ResizeObserver entirely, so the fixed timers above can all fire
+    // into a tab nothing will measure. Keep nudging on a slow interval, and again the moment
+    // the tab becomes visible — bounded, so a node that genuinely cannot measure does not
+    // keep a timer alive forever.
+    iv = setInterval(() => {
+      if (++ticks > KICK_MAX_TICKS) stop();
+      else kick();
+    }, KICK_INTERVAL_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    const el = canvasRef.current;
+    ro = el ? new ResizeObserver(() => kick()) : null;
+    if (el && ro) ro.observe(el);
+    return stop;
+  }, [getInternalNode, visibleIds, updateNodeInternals]);
+
+  // [U1] Z-order (z-order.ts): containers pinned below the wires, leaves above. Constructors
+  // stamp it; this heals whatever arrives without it — a blueprint, an imported graph — once,
+  // in state, so React Flow and the outline agree. View state, so it does not go through
+  // settle: nothing about the graph changes, only who paints over whom.
+  useEffect(() => {
+    if (needsZOrder(nodes as RFNode[])) setNodes((ns) => applyZOrder(ns as RFNode[]));
+  }, [nodes, setNodes]);
+  const bumpZ = useCallback((id: string) => setNodes((ns) => applyZOrder(ns as RFNode[], id)), [setNodes]);
+  const onNodeClick = useCallback((_e: unknown, node: Node) => bumpZ(node.id), [bumpZ]);
 
   const config = useMemo(() => resolveConfig(calliopeBaseUrl ? { baseUrl: calliopeBaseUrl } : {}), [calliopeBaseUrl]);
   const client = useMemo(() => new CalliopeClient(config), [config]);
@@ -553,11 +588,15 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   }, []);
   const settleRef = useRef(settle);
   settleRef.current = settle;
-  const onNodeDragStop = useCallback(() => {
-    const prev = dragBaseline.current ?? undefined;
-    dragBaseline.current = null;
-    withCurrent((ns, es) => settle(ns, es, { prev }), { history: false });
-  }, [settle, withCurrent]);
+  const onNodeDragStop = useCallback(
+    (_e: unknown, node: Node) => {
+      const prev = dragBaseline.current ?? undefined;
+      dragBaseline.current = null;
+      // [U1] The dropped leaf rises to the top of the stack (z-order.ts); a Beat stays pinned.
+      withCurrent((ns, es) => settle(applyZOrder(ns, node.id), es, { prev }), { history: false });
+    },
+    [settle, withCurrent],
+  );
 
   /**
    * Load a Calliope project onto the canvas.
@@ -1713,7 +1752,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                 nodes={nodes}
                 edges={displayedEdges}
                 onSelectionChange={onSelectionChange}
-                elevateNodesOnSelect={true /* [U1] false + zIndex convention */}
+                elevateNodesOnSelect={false /* [U1] z-order.ts owns the stack: containers -1, leaves bumped on click/drag/spawn */}
+                onNodeClick={onNodeClick}
                 snapToGrid={false /* [U8a] */}
                 snapGrid={[18, 18]}
                 onNodesChange={onNodesChange}

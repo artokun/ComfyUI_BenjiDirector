@@ -127,6 +127,8 @@ export interface GraphNode<D = BaseNodeData> {
   width?: number;
   height?: number;
   measured?: { width?: number; height?: number };
+  /** Stacking order. Passed through untouched; the editor's z-order convention writes it. */
+  zIndex?: number;
   data: D;
 }
 
