@@ -20,7 +20,7 @@ Args are a flat object. Ids come from `outline`. Positions are absolute canvas c
 | `move_node` | `id`, `x`, `y` | `{id, position}` |
 | `set_title` | `id`, `label` | |
 | `set_color` | `id`, `color` | Beat colour (leaf colours: `set_node_color`) |
-| `set_collapsed` | `id`, `collapsed` | subgraph today; groups after U6 |
+| `set_collapsed` | `id`, `collapsed` | any Beat — a plain group collapses to a header card with proxy handles |
 | `set_parent` | `id`, `parent_id \| null` | |
 | `set_pin` | `id`, `promoted` | |
 | `connect` | `source_handle`, `target_handle` | `{id, type}` |
