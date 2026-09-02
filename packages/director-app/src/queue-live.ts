@@ -217,8 +217,14 @@ export function useQueueJobs(opts: { all?: boolean } = {}): QueueView {
 
   const snap = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const polledProject = snap.projectId === projectId ? snap.project : null;
-  const projectJobs = liveOn ? live.jobs : (polledProject ?? ctx.jobs);
-  const jobs = wantAll ? (snap.all ?? []) : projectJobs;
+  // Coerce at the boundary. Any of these three sources can be momentarily unset — the live
+  // store before its first snapshot, a poll that failed, a context a host filled partially —
+  // and a non-array reaching `exportState` threw "jobs is not iterable" out of a render,
+  // which React escalates into unmounting the whole editor. A missing queue must degrade to
+  // an empty queue, never to a blank panel.
+  const asRows = (v: unknown): JobRow[] => (Array.isArray(v) ? (v as JobRow[]) : []);
+  const projectJobs = asRows(liveOn ? live.jobs : (polledProject ?? ctx.jobs));
+  const jobs = wantAll ? asRows(snap.all) : projectJobs;
 
   useEffect(() => {
     latestProjectJobs = projectJobs;

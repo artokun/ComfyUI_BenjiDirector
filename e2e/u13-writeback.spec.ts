@@ -262,10 +262,11 @@ test("grouping Calliope scenes creates the Beat row and moves them into it", asy
   expect(beatCreates).toHaveLength(1);
   expect(beatCreates[0]?.body).toMatchObject({ title: "Beat 3 — The climb", order_index: 2 });
   // Each scene's beat_id follows, because the re-id IS the move the write-back diff writes.
-  await expect.poll(() => patch(seen, "/api/projects/1/scenes/1").length).toBeGreaterThan(0);
-  await expect.poll(() => patch(seen, "/api/projects/1/scenes/2").length).toBeGreaterThan(0);
-  expect(patch(seen, "/api/projects/1/scenes/1").at(-1)?.body?.beat_id).toBe(3);
-  expect(patch(seen, "/api/projects/1/scenes/2").at(-1)?.body?.beat_id).toBe(3);
+  // The row's id only exists after the POST, so the beat_id PATCH is the SECOND write for each
+  // scene — the first carries the local Beat, whose beat_id is null. Poll for the id, not for
+  // "a patch happened", or the assertion reads the transient one.
+  await expect.poll(() => patch(seen, "/api/projects/1/scenes/1").at(-1)?.body?.beat_id).toBe(3);
+  await expect.poll(() => patch(seen, "/api/projects/1/scenes/2").at(-1)?.body?.beat_id).toBe(3);
   await expect(page.locator('.react-flow__node[data-id="cal-beat-3"]')).toBeVisible();
 });
 

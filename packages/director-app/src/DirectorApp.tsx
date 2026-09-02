@@ -344,6 +344,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   const [loadedProject, setLoadedProject] = useState<number | null>(null);
   const loadedProjectRef = useRef<number | null>(null);
   loadedProjectRef.current = loadedProject;
+  /** Write-backs are chained through this so two settles cannot race on one row. */
+  const writeQueue = useRef<Promise<void>>(Promise.resolve());
   /** Each loaded scene's current video_settings, so a director write merges rather than clobbers. */
   const settingsCache = useRef(new Map<number, Record<string, unknown>>());
   /**
@@ -547,10 +549,22 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         if (orphaned.length) setNote(`${orphaned.length} node(s) left the canvas but their Calliope rows are still there — a refresh brings them back`);
         if (intents.length || renames.length) {
           setSyncState("saving");
-          void Promise.all([
-            intents.length ? applyIntents(client, pid, intents, settingsCache.current, sceneRows.current) : Promise.resolve({ applied: 0, failed: [] }),
-            renames.length ? applyStoryIntents(client, pid, renames) : Promise.resolve({ applied: 0, failed: [] }),
-          ]).then(([scenesRes, storyRes]) => {
+          // Write-backs run IN ORDER, one settle's batch at a time. Two settles can touch the
+          // same row (group a scene into a local Beat, then re-id that Beat once Calliope
+          // gives it a row): fired concurrently, the older PATCH can land last and the row
+          // ends up holding the state we already moved away from. Chaining costs nothing —
+          // the batches are small — and makes the last write the newest one.
+          const batch = writeQueue.current.then(() =>
+            Promise.all([
+              intents.length ? applyIntents(client, pid, intents, settingsCache.current, sceneRows.current) : Promise.resolve({ applied: 0, failed: [] }),
+              renames.length ? applyStoryIntents(client, pid, renames) : Promise.resolve({ applied: 0, failed: [] }),
+            ]),
+          );
+          writeQueue.current = batch.then(
+            () => undefined,
+            () => undefined,
+          );
+          void batch.then(([scenesRes, storyRes]) => {
             const failures = scenesRes.failed.length + storyRes.failed.length;
             if (!failures) {
               setSyncState("saved");

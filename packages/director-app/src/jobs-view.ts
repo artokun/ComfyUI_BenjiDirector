@@ -244,7 +244,9 @@ export interface ExportView {
  * failed (including cancelled / superseded) → failed.
  */
 export function exportState(jobs: JobRow[], scenes: SceneRow[]): ExportView {
-  const job = latestExportJob(jobs);
+  // Defensive at the reader too: this runs during render, and a throw here unmounts the
+  // editor rather than showing an empty card.
+  const job = latestExportJob(Array.isArray(jobs) ? jobs : []);
   const clips = clipsSummary(scenes);
   let state: ExportStateKind = "idle";
   if (job) {
