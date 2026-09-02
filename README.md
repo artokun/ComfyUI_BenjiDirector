@@ -42,8 +42,11 @@ owns the topology — what is nested in what, and which continuity rails cross w
   project and the canvas becomes it — Beats as containers, scenes parented by `beat_id`,
   Character/Location refs and `chain_from_prev` as wires. Edits write back as a diff on
   every settle: heading and duration to the row, a scene's Beat to `beat_id`, a continuity
-  wire to `chain_from_prev`, position and pin to `video_settings.director`. Every write is
-  checked against the row Calliope returns — a 200 is not evidence it landed — and a move
+  wire to `chain_from_prev`, a Character or Location wire to `character_ids` / `location_id`,
+  a Beat or asset rename to its own row, position and pin to `video_settings.director`. A node
+  the canvas invents gets its row FIRST and takes that row's id; deleting one asks before it
+  deletes the row, and undo goes back through the same write-back. Every write is
+  checked against the row Calliope returns — a 200 is not evidence it landed — and a change
   it would not keep is snapped back with the reason shown. Beat-level state Calliope cannot
   store (subgraph-ness, collapse, colour, box, rail labels) lives in a per-project sidecar.
 - **The Calliope tools**: `panel_director_project` / `_story` / `_scene` / `_workflow` /

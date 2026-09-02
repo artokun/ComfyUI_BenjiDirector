@@ -42,10 +42,25 @@ import {
   uniquifyLabel,
   type BoundaryPort,
   type GraphEdge,
-  type GraphNode, isRelayHandle } from "@benjidirector/graph-core";
+  type GraphNode,
+  type PortInfo, isRelayHandle } from "@benjidirector/graph-core";
 import { CalliopeClient, probe, resolveConfig, type JobRow, type ReachabilityState, type SceneRow, type Schemas, type StoryBundle } from "@benjidirector/calliope-client";
 import { calId, calliopeRef, projectToGraph } from "./calliope-bind.js";
-import { applyIntents, diffForCalliope } from "./calliope-sync.js";
+import {
+  applyIntents,
+  applyStoryIntents,
+  createAssetRow,
+  createBeatRow,
+  createSceneRow,
+  deleteRows as deleteCalliopeRows,
+  diffForCalliope,
+  diffStoryForCalliope,
+  feedChain,
+  reidNode,
+  withOrderIndexes,
+  withoutDeadRows,
+  type SceneCreateSpec,
+} from "./calliope-sync.js";
 import { applyTopology, captureTopology, loadTopology, saveTopology, type RailLabels } from "./topology.js";
 import { ActionsContext, type EditorActions } from "./actions.js";
 import {
@@ -78,7 +93,7 @@ import { useDisplayedGraph } from "./collapse-view.js";
 import { DirectorContext, type DirectorCtx } from "./director-context.jsx";
 import { resolveDrive, type DriveKit } from "./drive-registry.js";
 import { Icon } from "./icons.jsx";
-import { ModalProvider } from "./modal.jsx";
+import { ModalProvider, useModal, type ConfirmOptions, type ModalApi } from "./modal.jsx";
 import { summarizeEdge, summarizeNode } from "./outline.js";
 import { usePanels } from "./panels.js";
 import { Slot } from "./slots.jsx";
@@ -235,6 +250,25 @@ interface WireIntent {
   lookingFor: "input" | "output";
 }
 
+/**
+ * What a wire dropped together with a NEW scene means to that scene's row.
+ *
+ * It has to go in the CREATE body, because the write-back diff cannot see it: a node that has
+ * just appeared has no previous state to differ from, so a wire drawn in the same settle that
+ * placed it would be drawn on the canvas and absent from the film.
+ */
+function seedFromWire(wire: WireIntent | null, port: PortInfo | undefined, lastSceneId: number | null): Partial<SceneCreateSpec> {
+  if (!wire || !port || wire.lookingFor !== "input") return {};
+  const ref = calliopeRef(wire.node);
+  if (!ref) return {};
+  if (port.label === "CHARACTER" && ref.kind === "character") return { character_ids: [ref.id] };
+  if (port.label === "LOCATION" && ref.kind === "location") return { location_id: ref.id };
+  // A new scene is appended to the END of the cut, so the only honest continuity source is
+  // the scene that was last before it — which is what chain_from_prev means to Calliope.
+  if (port.label === "IN FRAME" && ref.kind === "scene" && ref.id === lastSceneId) return { chain_from_prev: true };
+  return {};
+}
+
 interface PaletteState {
   x: number;
   y: number;
@@ -251,6 +285,19 @@ export interface DirectorAppProps {
   apiRef?: { current: DriveFn | null };
   /** Markdown → safe HTML, supplied by the host. */
   renderMarkdown?: (md: string) => string;
+}
+
+/**
+ * Publishes the modal API to the editor.
+ *
+ * `ModalProvider` is rendered INSIDE `Editor`, so `useModal()` called in Editor's own body
+ * would read the context above it and get the "everything is cancelled" fallback — every
+ * delete would silently refuse. This renders nothing and lives inside the provider, which is
+ * the only place the real api exists.
+ */
+function ModalBridge({ into }: { into: { current: ModalApi | null } }) {
+  into.current = useModal();
+  return null;
 }
 
 function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
@@ -273,6 +320,23 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   loadedProjectRef.current = loadedProject;
   /** Each loaded scene's current video_settings, so a director write merges rather than clobbers. */
   const settingsCache = useRef(new Map<number, Record<string, unknown>>());
+  /**
+   * Every loaded scene's row as last read or echoed. Two things need the row and not the node:
+   * `character_ids` is a LIST the canvas draws one of (calliope-sync), so a wire edit has to
+   * know the rest of it; and a create/delete has to reorder the FULL cut, which means knowing
+   * every id and its order_index.
+   */
+  const sceneRows = useRef(new Map<number, SceneRow>());
+  /**
+   * Node ids whose Calliope row this session deleted. Undo restores a canvas, not a film: a
+   * node cannot come back to point at a row that no longer exists.
+   */
+  const deadRows = useRef(new Set<string>());
+  /** The real modal api, published by `ModalBridge` from inside the provider. */
+  const modalRef = useRef<ModalApi | null>(null);
+  /** The in-flight Beat-row create behind the last `groupNodes`, so `group` can return the row's id. */
+  const groupRow = useRef<Promise<string | undefined> | null>(null);
+  const confirm = useCallback(async (o: ConfirmOptions): Promise<boolean> => (modalRef.current ? modalRef.current.confirm(o) : false), []);
   const [syncState, setSyncState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   // ── [U0] what the context exposes to modules ──
   const [project, setProject] = useState<{ story: StoryBundle; scenes: SceneRow[] } | null>(null);
@@ -363,7 +427,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
 
   /** Bring the graph back to a consistent state. Order is not interchangeable. */
   const settle = useCallback(
-    (ns: RFNode[], es: Edge[], opts: { reparent?: boolean; sync?: boolean; prev?: { nodes: RFNode[]; edges: Edge[] }; railLabels?: RailLabels } = {}) => {
+    (ns: RFNode[], es: Edge[], opts: { reparent?: boolean; sync?: boolean; prev?: { nodes: RFNode[]; edges: Edge[] }; railLabels?: RailLabels; fromSnapBack?: boolean } = {}) => {
       // settle receives the arrays a caller has ALREADY mutated, so it is the wrong place to
       // snapshot for undo — that recorded the post-change state and made every undo a no-op.
       let core = asCore(ns);
@@ -412,34 +476,75 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       const pid = loadedProjectRef.current;
       if (pid !== null && opts.sync !== false) {
         const prev = opts.prev ?? { nodes: nodesRef.current as RFNode[], edges: edgesRef.current };
-        const intents = diffForCalliope(
-          { nodes: asCore(prev.nodes), edges: asCoreEdges(prev.edges) },
-          { nodes: asCore(done.nodes), edges: asCoreEdges(done.edges) },
-        );
-        if (intents.length) {
+        const before = { nodes: asCore(prev.nodes), edges: asCoreEdges(prev.edges) };
+        const after = { nodes: asCore(done.nodes), edges: asCoreEdges(done.edges) };
+        // `rows` is what makes a CHARACTER wire an EDIT of character_ids rather than a
+        // replacement — the canvas draws the first of a list it can only see one of.
+        const intents = diffForCalliope(before, after, { rows: sceneRows.current });
+        const renames = diffStoryForCalliope(before, after);
+        // A node can leave the canvas without its row leaving the film — an undo of an add, or
+        // a Delete-key removal, which does not run the row delete. Nothing here deletes it
+        // (that needs the confirm), but the canvas must not quietly disagree with the film.
+        const orphaned = before.nodes.filter((n) => calliopeRef(n.id) && !deadRows.current.has(n.id) && !after.nodes.some((m) => m.id === n.id));
+        if (orphaned.length) setNote(`${orphaned.length} node(s) left the canvas but their Calliope rows are still there — a refresh brings them back`);
+        if (intents.length || renames.length) {
           setSyncState("saving");
-          void applyIntents(client, pid, intents, settingsCache.current).then((r) => {
-            if (!r.failed.length) {
+          void Promise.all([
+            intents.length ? applyIntents(client, pid, intents, settingsCache.current, sceneRows.current) : Promise.resolve({ applied: 0, failed: [] }),
+            renames.length ? applyStoryIntents(client, pid, renames) : Promise.resolve({ applied: 0, failed: [] }),
+          ]).then(([scenesRes, storyRes]) => {
+            const failures = scenesRes.failed.length + storyRes.failed.length;
+            if (!failures) {
               setSyncState("saved");
               return;
             }
             setSyncState("error");
-            setNote(`Calliope did not keep ${r.failed.length} change(s): ${r.failed[0]?.error ?? ""}`);
-            // A Beat move Calliope would not keep is snapped back where it was, so the canvas
-            // never shows a topology the film does not have — a reload would have reverted it
-            // silently, which is the worse surprise.
-            const snapBack = new Set(r.failed.filter((f) => f.field === "beat_id").map((f) => calId.scene(f.sceneId)));
-            if (!snapBack.size) return;
+            setNote(`Calliope did not keep ${failures} change(s): ${scenesRes.failed[0]?.error ?? storyRes.failed[0]?.error ?? ""}`);
+            // A snap-back is itself a settle, and its own write can be refused too. One level
+            // is a correction; two is a ping-pong between a canvas and a server that disagree,
+            // so a snap-back never snaps back again — the note is the last word.
+            if (opts.fromSnapBack) return;
+            // A change Calliope would not keep is put back where it was, so the canvas never
+            // shows a film that does not exist — a reload would have reverted it silently,
+            // which is the worse surprise. Each refused FIELD restores only what it owns.
             const prevById = new Map(prev.nodes.map((n) => [n.id, n] as const));
+            const parentBack = new Set<string>();
+            const labelBack = new Set<string>();
+            const wireBack: { nodeId: string; port: "CHARACTER" | "LOCATION" }[] = [];
+            for (const f of scenesRes.failed) {
+              const nodeId = calId.scene(f.sceneId);
+              if (f.field === "beat_id") parentBack.add(nodeId);
+              else if (f.field === "heading") labelBack.add(nodeId);
+              else if (f.field === "character_ids") wireBack.push({ nodeId, port: "CHARACTER" });
+              else if (f.field === "location_id") wireBack.push({ nodeId, port: "LOCATION" });
+            }
+            for (const f of storyRes.failed) if (f.field !== "network") labelBack.add(f.kind === "beat" ? calId.beat(f.id) : calId[f.kind](f.id));
+            if (!parentBack.size && !labelBack.size && !wireBack.length) return;
+            let nextEdges = edgesRef.current;
+            for (const { nodeId, port } of wireBack) {
+              const handle = `${nodeId}:in:${port}`;
+              // The whole relay chain, or a rail's outer half survives while its inner half is
+              // restored and reconcile has to invent a second one.
+              const doomed = new Set(feedChain(handle, asCoreEdges(nextEdges)).map((e) => e.id));
+              const restored = feedChain(handle, asCoreEdges(prev.edges));
+              nextEdges = [...nextEdges.filter((e) => !doomed.has(e.id)), ...asRFEdges(restored.filter((e) => !nextEdges.some((x) => x.id === e.id)))];
+            }
             settleRef.current(
               (nodesRef.current as RFNode[]).map((n) => {
-                const was = snapBack.has(n.id) ? prevById.get(n.id) : undefined;
-                return was ? ({ ...n, parentId: was.parentId, position: was.position } as RFNode) : n;
+                const was = prevById.get(n.id);
+                if (!was) return n;
+                let out = n;
+                if (parentBack.has(n.id)) out = { ...out, parentId: was.parentId, position: was.position } as RFNode;
+                if (labelBack.has(n.id)) {
+                  const label = was.data.label;
+                  out = { ...out, data: out.data.kind === "scene" ? { ...out.data, label, heading: label } : { ...out.data, label } } as RFNode;
+                }
+                return out;
               }),
-              edgesRef.current,
+              nextEdges,
               // Synced on purpose: the same PATCH carried a position Calliope DID keep, so the
               // snap-back writes the restored position (and the Beat it never left) back too.
-              { reparent: false },
+              { reparent: false, fromSnapBack: true },
             );
           });
         }
@@ -474,41 +579,43 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     [pushHistory, setEdges, setNodes],
   );
 
-  const undo = useCallback(() => {
-    const prev = history.current.pop();
-    if (!prev) return setNote("nothing to undo");
-    restoring.current = true;
-    withCurrent(
-      (ns, es) => {
-        future.current.push({ nodes: ns, edges: es });
-        const done = decorate(prev.nodes, prev.edges);
-        setNodes(done.nodes);
-        setEdges(done.edges);
-        restoring.current = false;
-        setNote("undo");
-      },
-      { history: false },
-    );
-    return undefined;
-  }, [setEdges, setNodes, withCurrent]);
+  /**
+   * Undo and redo, THROUGH settle.
+   *
+   * They used to call `decorate` and set state directly, which meant an undo on a Calliope
+   * project moved the canvas and left the rows where the undone edit had put them — the one
+   * place where the canvas is authoritative and silently wrong. Going through settle with
+   * `prev` = the state being LEFT makes the write-back see the restore as the edit it is.
+   * `reparent: false` because a restored graph is already settled; re-deriving parents from
+   * geometry would re-apply the very drag being undone.
+   *
+   * Rows this session deleted do not come back (`withoutDeadRows`): undo restores a canvas,
+   * not a film, and a node whose row is gone would point at nothing.
+   */
+  const restore = useCallback(
+    (from: { nodes: RFNode[]; edges: Edge[] }[], to: { nodes: RFNode[]; edges: Edge[] }[], what: "undo" | "redo") => {
+      const target = from.pop();
+      if (!target) {
+        setNote(`nothing to ${what}`);
+        return;
+      }
+      restoring.current = true;
+      withCurrent(
+        (ns, es) => {
+          to.push({ nodes: ns, edges: es });
+          const live = withoutDeadRows({ nodes: asCore(target.nodes), edges: asCoreEdges(target.edges) }, deadRows.current);
+          settle(asRF(live.nodes), asRFEdges(live.edges), { reparent: false, prev: { nodes: ns, edges: es } });
+          restoring.current = false;
+          setNote(live.stripped.length ? `${what} — ${live.stripped.length} node(s) stayed deleted, their Calliope rows are gone` : what);
+        },
+        { history: false },
+      );
+    },
+    [settle, withCurrent],
+  );
 
-  const redo = useCallback(() => {
-    const next = future.current.pop();
-    if (!next) return setNote("nothing to redo");
-    restoring.current = true;
-    withCurrent(
-      (ns, es) => {
-        history.current.push({ nodes: ns, edges: es });
-        const done = decorate(next.nodes, next.edges);
-        setNodes(done.nodes);
-        setEdges(done.edges);
-        restoring.current = false;
-        setNote("redo");
-      },
-      { history: false },
-    );
-    return undefined;
-  }, [setEdges, setNodes, withCurrent]);
+  const undo = useCallback(() => restore(history.current, future.current, "undo"), [restore]);
+  const redo = useCallback(() => restore(future.current, history.current, "redo"), [restore]);
 
   // Ctrl/Cmd+Z and Ctrl+Shift+Z, scoped to the pane so they never steal ComfyUI's own undo
   // while the user is working on the canvas behind us.
@@ -572,6 +679,9 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         const done = decorate(asRF(p.nodes as GraphNode<DirectorData>[]), asRFEdges(p.edges));
         history.current = [];
         future.current = [];
+        sceneRows.current = new Map();
+        deadRows.current = new Set();
+        loadedProjectRef.current = null;
         setNodes(done.nodes);
         setEdges(done.edges);
         setLoadedProject(null);
@@ -582,6 +692,9 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       try {
         const [story, scenesRes] = await Promise.all([client.story.get(projectId), client.scenes.list(projectId)]);
         settingsCache.current = new Map(scenesRes.scenes.map((sc) => [sc.id, sc.video_settings ?? {}]));
+        sceneRows.current = new Map(scenesRes.scenes.map((sc) => [sc.id, sc]));
+        // A different film: nothing deleted here has anything to say about the one arriving.
+        deadRows.current = new Set();
         setSyncState("idle");
         const g = projectToGraph({ story, scenes: scenesRes.scenes });
         // Beat-level topology (subgraph-ness, collapse, colour, box, rail labels) lives in the
@@ -619,6 +732,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     if (pid === null) return;
     const [story, scenesRes] = await Promise.all([client.story.get(pid), client.scenes.list(pid)]);
     settingsCache.current = new Map(scenesRes.scenes.map((sc) => [sc.id, sc.video_settings ?? {}]));
+    sceneRows.current = new Map(scenesRes.scenes.map((sc) => [sc.id, sc]));
     setProject({ story, scenes: scenesRes.scenes });
     const fresh = projectToGraph({ story, scenes: scenesRes.scenes });
     const current = asCore(nodesRef.current as RFNode[]);
@@ -655,6 +769,109 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     settle(asRF(sortParentsFirst(merged)), asRFEdges(edges), { sync: false });
     setNote(`refreshed “${story.project.title}” — ${story.beats.length} beats, ${scenesRes.scenes.length} scenes, ~${scenesRes.estimated_duration_sec}s`);
   }, [client, settle]);
+
+  // ── rows for what the canvas invents, and the reverse ────────────────────────────────
+
+  /** The Beat row a node dropped here would land in — the containment settle is about to apply. */
+  const beatIdForDrop = useCallback((node: GraphNode<DirectorData>): number | null => {
+    const placed = containmentFor(node, asCore(nodesRef.current as RFNode[]));
+    const ref = placed.parentId ? calliopeRef(placed.parentId) : null;
+    return ref?.kind === "beat" ? ref.id : null;
+  }, []);
+
+  /**
+   * Create the Calliope row a new node stands for, and hand the node back re-keyed to it.
+   *
+   * The row comes FIRST. A node placed with a local id and re-keyed a round trip later
+   * changes id under the user's hands — and its port ids, its wires and any rail that aliases
+   * one of its ports all embed that id, so the window between the two is one where a wire
+   * drawn by hand lands on a node that is about to stop existing. Returns null when Calliope
+   * refused: nothing is placed, and the note says why rather than leaving a rowless ghost.
+   */
+  const createRowFor = useCallback(
+    async (made: GraphNode<DirectorData>, seed: Partial<SceneCreateSpec> = {}): Promise<{ node: RFNode; rows: SceneRow[] | null } | null> => {
+      const pid = loadedProjectRef.current;
+      const kind = made.data.kind;
+      const wantsRow = kind === "scene" || kind === "asset";
+      if (!wantsRow) return { node: made as unknown as RFNode, rows: null };
+      if (pid === null) {
+        // (e) Never silently: the demo canvas keeps working, but nothing was written.
+        setNote(`demo project — “${made.data.label}” is on the canvas only; open a Calliope project to give it a row`);
+        return { node: made as unknown as RFNode, rows: null };
+      }
+      try {
+        if (kind === "scene") {
+          const d = made.data as SceneData;
+          const res = await createSceneRow(
+            client,
+            pid,
+            { heading: d.heading || d.label, beat_id: beatIdForDrop(made), duration_sec: d.durationSec ?? 5, ...seed },
+            [...sceneRows.current.values()],
+            settingsCache.current,
+          );
+          sceneRows.current = new Map(res.rows.map((r) => [r.id, r]));
+          if (res.failed.length) setNote(`scene ${res.row.id} created, but Calliope did not keep every field: ${res.failed[0]?.error ?? ""}`);
+          const seeded = { ...made, data: { ...made.data, orderIndex: res.row.order_index } } as GraphNode<DirectorData>;
+          const reid = reidNode([seeded], [], made.id, calId.scene(res.row.id));
+          return { node: (reid.nodes[0] ?? seeded) as unknown as RFNode, rows: res.rows };
+        }
+        const asset = (made.data as AssetData).asset;
+        const res = await createAssetRow(client, pid, asset, made.data.label);
+        if (res.failed) setNote(res.failed);
+        const reid = reidNode([made], [], made.id, calId[asset](res.id));
+        return { node: (reid.nodes[0] ?? made) as unknown as RFNode, rows: null };
+      } catch (err) {
+        setSyncState("error");
+        setNote(`Calliope refused to create the ${kind}: ${err instanceof Error ? err.message : String(err)} — nothing was added to the canvas`);
+        return null;
+      }
+    },
+    [beatIdForDrop, client],
+  );
+
+  /**
+   * Delete the Calliope rows behind these nodes, with the confirmation a film deserves.
+   *
+   * Reached from the toolbar, from `remove_node`, and — through the context — from the
+   * container-delete unit, so all three ask the same question and take the same care.
+   * Returns which ids may now leave the canvas: a row Calliope refused to delete keeps its
+   * node, because a canvas without it would be a lie the next refresh would undo anyway.
+   */
+  const deleteRows = useCallback(
+    async (nodeIds: string[]): Promise<{ confirmed: boolean; gone: string[]; rows: SceneRow[] | null }> => {
+      const pid = loadedProjectRef.current;
+      const rows = nodeIds.filter((id) => calliopeRef(id));
+      if (pid === null || !rows.length) return { confirmed: true, gone: nodeIds, rows: null };
+      const ok = await confirm({
+        title: rows.length === 1 ? "Delete this from the film?" : `Delete ${rows.length} rows from the film?`,
+        body: "This also deletes the Calliope row — the scene, Beat or asset leaves the film, not just the canvas, and undo will not bring it back.",
+        confirmLabel: "Delete",
+        danger: true,
+      });
+      if (!ok) {
+        setNote("delete cancelled — nothing was removed");
+        return { confirmed: false, gone: [], rows: null };
+      }
+      setSyncState("saving");
+      const report = await deleteCalliopeRows(client, pid, rows, [...sceneRows.current.values()]);
+      if (report.rows) sceneRows.current = new Map(report.rows.map((r) => [r.id, r]));
+      for (const id of report.deleted) deadRows.current.add(id);
+      if (report.failed.length) {
+        setSyncState("error");
+        setNote(`Calliope kept ${report.failed.length} row(s): ${report.failed[0]?.error ?? ""} — those nodes stay on the canvas`);
+      } else if (report.reorderError) {
+        setSyncState("error");
+        setNote(`rows deleted, but the reorder after them failed: ${report.reorderError} — the cut has a gap until the next refresh`);
+      } else setSyncState("saved");
+      const kept = new Set(report.failed.map((f) => f.nodeId));
+      // `rows` is the surviving cut, renumbered from 1 by the reorder. The caller restamps it
+      // in the SAME settle that removes the nodes — a second settle would race that one and
+      // leave a node on the old numbering beside one on the new, which the continuity check
+      // then reads as non-consecutive when it is not.
+      return { confirmed: true, gone: nodeIds.filter((id) => !kept.has(id)), rows: report.rows };
+    },
+    [client, confirm],
+  );
 
   /** Canvas-relative menu coordinates. `fixed` would resolve against the panel's transform. */
   const canvasPoint = useCallback((clientX: number, clientY: number) => {
@@ -816,16 +1033,26 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
 
   // ── nodes ────────────────────────────────────────────────────────────────────────────
 
-  /** Place a node from the palette and, if a wire was being dragged, connect it. */
+  /**
+   * Place a node from the palette and, if a wire was being dragged, connect it.
+   *
+   * On a Calliope project the ROW comes first (`createRowFor`), so what lands on the canvas
+   * already carries its `cal-*` id and the wire is drawn onto the ports that id derives.
+   */
   const placeNode = useCallback(
-    (kind: NodeKind, at: { x: number; y: number }, wire: WireIntent | null) => {
-      const node = makeNode(kind, at);
+    async (kind: NodeKind, at: { x: number; y: number }, wire: WireIntent | null) => {
+      const made = makeNode(kind, at);
       setPalette(null);
+      const portFor = (n: GraphNode<DirectorData>) =>
+        wire ? portsOf(n as unknown as RFNode).find((p) => p.type === wire.type && (wire.lookingFor === "input" ? p.isInput : !p.isInput)) : undefined;
+      const ordered = [...sceneRows.current.values()].sort((a, b) => a.order_index - b.order_index);
+      const created = await createRowFor(made, seedFromWire(wire, portFor(made), ordered.length ? (ordered[ordered.length - 1]?.id ?? null) : null));
+      if (!created) return;
+      const node = created.node;
       withCurrent((ns, es) => {
         let nextEdges = es;
         if (wire) {
-          const ports = portsOf(node as unknown as RFNode);
-          const match = ports.find((p) => p.type === wire.type && (wire.lookingFor === "input" ? p.isInput : !p.isInput));
+          const match = portFor(node as unknown as GraphNode<DirectorData>);
           if (match) {
             const [source, sh, target, th] =
               wire.lookingFor === "input" ? [wire.node, wire.handle, node.id, match.id] : [node.id, match.id, wire.node, wire.handle];
@@ -836,11 +1063,15 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
           } else setNote(`${node.data.label} has no ${wire.type} ${wire.lookingFor} to wire to — placed unwired`);
         }
         // Reparent ON: dropping inside a Beat should join it, exactly as a drag would.
-        settle([...ns, node as unknown as RFNode], nextEdges);
+        // The create already told Calliope which Beat that is, and the reorder it ran
+        // renumbered the whole cut — restamp it, or the new scene looks out of order.
+        const placed = [...ns, node];
+        const withOrder = created.rows ? asRF(withOrderIndexes(asCore(placed), created.rows)) : placed;
+        settle(withOrder, nextEdges);
         setNote((s) => s || `added ${node.data.label}`);
       });
     },
-    [settle, withCurrent],
+    [createRowFor, settle, withCurrent],
   );
 
   /** Stamp a blueprint at a position and, if it was saved as a subgraph, promote it again. */
@@ -861,34 +1092,50 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     [settle, withCurrent],
   );
 
-  /** Delete the selection, and every edge that touched it, then reconcile. */
-  const deleteSelection = useCallback(() => {
-    withCurrent((ns, es) => {
-      const doomed = new Set(ns.filter((n) => n.selected).map((n) => n.id));
-      if (!doomed.size) {
-        setNote("nothing selected");
-        return;
-      }
-      // Children of a deleted container go with it — an orphan holding a parentId that no
-      // longer resolves renders at the wrong place and confuses containment forever after.
-      let grew = true;
-      while (grew) {
-        grew = false;
-        for (const n of ns) {
-          if (!doomed.has(n.id) && n.parentId && doomed.has(n.parentId)) {
-            doomed.add(n.id);
-            grew = true;
-          }
+  /**
+   * Everything a delete takes with it: the nodes named, plus every descendant.
+   *
+   * Children of a deleted container go with it — an orphan holding a parentId that no longer
+   * resolves renders at the wrong place and confuses containment forever after.
+   */
+  const withDescendants = useCallback((ns: RFNode[], ids: Iterable<string>): Set<string> => {
+    const doomed = new Set(ids);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const n of ns) {
+        if (!doomed.has(n.id) && n.parentId && doomed.has(n.parentId)) {
+          doomed.add(n.id);
+          grew = true;
         }
       }
-      setNote(`deleted ${doomed.size} node${doomed.size === 1 ? "" : "s"}`);
+    }
+    return doomed;
+  }, []);
+
+  /** Delete the selection, its rows, and every edge that touched it, then reconcile. */
+  const deleteSelection = useCallback(async () => {
+    const all = nodesRef.current as RFNode[];
+    const selected = all.filter((n) => n.selected).map((n) => n.id);
+    if (!selected.length) {
+      setNote("nothing selected");
+      return;
+    }
+    const doomed = withDescendants(all, selected);
+    // The rows go first, and only what Calliope actually let go leaves the canvas.
+    const res = await deleteRows([...doomed]);
+    if (!res.confirmed) return;
+    const gone = new Set(res.gone);
+    withCurrent((ns, es) => {
+      setNote(`deleted ${gone.size} node${gone.size === 1 ? "" : "s"}`);
+      const kept = ns.filter((n) => !gone.has(n.id));
       settle(
-        ns.filter((n) => !doomed.has(n.id)),
-        es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target)),
+        res.rows ? asRF(withOrderIndexes(asCore(kept), res.rows)) : kept,
+        es.filter((e) => !gone.has(e.source) && !gone.has(e.target)),
         { reparent: false },
       );
     });
-  }, [settle, withCurrent]);
+  }, [deleteRows, settle, withCurrent, withDescendants]);
 
   /** Wrap the chosen nodes in a new Beat, sized from their own bounds. Returns the Beat id. */
   const groupNodes = useCallback((pick: (n: RFNode) => boolean, title?: string): string | undefined => {
@@ -924,8 +1171,38 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       setNote(`grouped ${chosen.length} node${chosen.length === 1 ? "" : "s"} into ${container.data.label}`);
       settle(next, es, { reparent: false });
     });
+    // A Beat around Calliope scenes is a Beat in the film: create the row, then re-id the
+    // container to it. The scenes' `beat_id` needs no special case — moving them from a local
+    // Beat to a `cal-beat-*` one is exactly the change the write-back diff already writes.
+    groupRow.current = null;
+    const pid = loadedProjectRef.current;
+    if (pid !== null && chosen.some((n) => calliopeRef(n.id)?.kind === "scene")) {
+      groupRow.current = (async () => {
+        try {
+          const order = all.filter((n) => calliopeRef(n.id)?.kind === "beat").length;
+          const res = await createBeatRow(client, pid, container.data.label, order);
+          if (res.failed) setNote(res.failed);
+          const calBeat = calId.beat(res.id);
+          await new Promise<void>((resolve) => {
+            withCurrent(
+              (ns, es) => {
+                const out = reidNode(asCore(ns), asCoreEdges(es), id, calBeat);
+                settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false, prev: { nodes: ns, edges: es } });
+                resolve();
+              },
+              { history: false },
+            );
+          });
+          return calBeat;
+        } catch (err) {
+          setSyncState("error");
+          setNote(`the Beat is on the canvas only — Calliope refused it: ${err instanceof Error ? err.message : String(err)}`);
+          return id;
+        }
+      })();
+    }
     return id;
-  }, [settle, withCurrent]);
+  }, [client, settle, withCurrent]);
 
   const groupSelection = useCallback(() => groupNodes((n) => !!n.selected), [groupNodes]);
 
@@ -1235,27 +1512,33 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         case "add_node": {
           const kind = str(args.kind, "kind") as NodeKind;
           if (!PALETTE_KINDS.some((k) => k.kind === kind)) throw new Error(`kind must be one of ${PALETTE_KINDS.map((k) => k.kind).join(", ")}`);
-          const node = makeNode(kind, { x: num(args.x, "x"), y: num(args.y, "y") });
+          const made = makeNode(kind, { x: num(args.x, "x"), y: num(args.y, "y") });
           if (typeof args.label === "string" && args.label) {
-            node.data = node.data.kind === "scene" ? { ...node.data, label: args.label, heading: args.label } : { ...node.data, label: args.label };
+            made.data = made.data.kind === "scene" ? { ...made.data, label: args.label, heading: args.label } : { ...made.data, label: args.label };
           }
+          // The row first, so the id the agent gets back is the row's — the same path the
+          // palette takes. A refused create adds nothing and says so.
+          const created = await createRowFor(made);
+          if (!created) throw new Error(`Calliope would not create that ${kind} — nothing was added`);
+          const node = created.node;
           return run((ns, es) => {
-            settle([...ns, node as unknown as RFNode], es);
+            const placed = [...ns, node];
+            settle(created.rows ? asRF(withOrderIndexes(asCore(placed), created.rows)) : placed, es);
             return { id: node.id, label: node.data.label };
           });
         }
-        case "remove_node":
+        case "remove_node": {
+          const target = find(nodesRef.current as RFNode[], args.id);
+          const doomed = withDescendants(nodesRef.current as RFNode[], [target.id]);
+          const res = await deleteRows([...doomed]);
+          if (!res.confirmed) return { removed: [], note: "cancelled at the confirm — the rows and the nodes are both still there" };
+          const gone = new Set(res.gone);
           return run((ns, es) => {
-            const target = find(ns, args.id);
-            const doomed = new Set<string>([target.id]);
-            let grew = true;
-            while (grew) {
-              grew = false;
-              for (const n of ns) if (!doomed.has(n.id) && n.parentId && doomed.has(n.parentId)) { doomed.add(n.id); grew = true; }
-            }
-            settle(ns.filter((n) => !doomed.has(n.id)), es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target)), { reparent: false });
-            return { removed: [...doomed] };
+            const kept = ns.filter((n) => !gone.has(n.id));
+            settle(res.rows ? asRF(withOrderIndexes(asCore(kept), res.rows)) : kept, es.filter((e) => !gone.has(e.source) && !gone.has(e.target)), { reparent: false });
+            return { removed: [...gone] };
           });
+        }
         case "calliope": {
           // Passthrough to the Calliope client: { ns, op, args }. The client is the one place
           // that knows the routes, so the tool layer names (ns, op) and the lookup happens
@@ -1443,7 +1726,10 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
           const set = new Set(ids);
           const beatId = groupNodes((n) => set.has(n.id), typeof args.label === "string" ? args.label : undefined);
           if (!beatId) throw new Error("nothing groupable among those ids (Beats cannot be grouped)");
-          return { id: beatId };
+          // A Beat around Calliope scenes gets a row, and with it the id the agent should
+          // hold — wait for it rather than handing back one that is about to be replaced.
+          const rowed = groupRow.current;
+          return { id: rowed ? ((await rowed) ?? beatId) : beatId };
         }
         case "save_blueprint":
           return run((ns) => {
@@ -1480,7 +1766,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     return () => {
       apiRef.current = null;
     };
-  }, [actions, apiRef, client, groupNodes, loadProject, refreshProject, settle, withCurrent]);
+  }, [actions, apiRef, client, createRowFor, deleteRows, groupNodes, loadProject, refreshProject, settle, withCurrent, withDescendants]);
 
   // ── palette items ────────────────────────────────────────────────────────────────────
 
@@ -1527,9 +1813,10 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       blueprints,
       drive,
       setJobs,
+      deleteRows,
       ...(renderMarkdown ? { renderMarkdown } : {}),
     }),
-    [blueprints, client, drive, jobs, loadProject, loadedProject, note, project, refreshProject, renderMarkdown, selectedIds, status],
+    [blueprints, client, deleteRows, drive, jobs, loadProject, loadedProject, note, project, refreshProject, renderMarkdown, selectedIds, status],
   );
   const panelDefs = usePanels();
   const tabPanels = panelDefs.filter((p) => (p.placement ?? "tab") === "tab");
@@ -1547,6 +1834,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         <CarryContext.Provider value={carryRef.current}>
           <DirectorContext.Provider value={ctx}>
           <ModalProvider>
+          <ModalBridge into={modalRef} />
           <div className="bd-root">
             <div className="bd-toolbar">
               <strong className="bd-brand"><Icon name="clapper" /> Director</strong>

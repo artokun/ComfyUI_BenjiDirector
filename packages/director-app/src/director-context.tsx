@@ -34,6 +34,12 @@ export interface DirectorCtx {
   blueprints: Record<string, Blueprint>;
   /** Run an editor command by name — the same path the agent uses. */
   drive(name: string, args?: Record<string, unknown>): Promise<unknown>;
+  /**
+   * [U13] Delete the Calliope rows behind these nodes; the confirm is included. `gone` is what
+   * may now leave the canvas — a row Calliope refused to delete keeps its node. On the demo
+   * project (no rows) it confirms nothing and returns every id.
+   */
+  deleteRows(nodeIds: string[]): Promise<{ confirmed: boolean; gone: string[]; rows: SceneRow[] | null }>;
   /** Registered by feature modules; `undefined` until the live unit lands. */
   setJobs?(jobs: JobRow[]): void;
   /** Markdown → safe HTML, injected by the host (the panel passes marked + DOMPurify). */
