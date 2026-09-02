@@ -35,7 +35,7 @@ async function selectBeat(page: Page): Promise<void> {
 }
 
 test("toolbar trash asks; 'Delete only the Beat' lifts the scenes out in place; undo restores; 'Delete all' takes everything", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   const before = { "sc-01": await absolute(page, "sc-01"), "sc-02": await absolute(page, "sc-02") };
   const edgesBefore = (await drive<Outline>(page, "outline")).edges.map((e) => e.id).sort();
   expect(edgesBefore.length).toBe(5);
@@ -92,7 +92,7 @@ test("toolbar trash asks; 'Delete only the Beat' lifts the scenes out in place; 
 });
 
 test("the Delete key on a populated Beat opens the confirm instead of cascading", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   await selectBeat(page);
   await page.keyboard.press("Delete");
   const modal = page.locator(".bd-modal");
@@ -107,7 +107,7 @@ test("the Delete key on a populated Beat opens the confirm instead of cascading"
 });
 
 test("the pane toolbar's Delete routes a populated Beat to the confirm too", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   await selectBeat(page);
   await page.locator(".bd-toolbar button", { hasText: "Delete" }).first().click();
   await expect(page.locator(".bd-modal")).toBeVisible();
@@ -117,7 +117,7 @@ test("the pane toolbar's Delete routes a populated Beat to the confirm too", asy
 });
 
 test("an EMPTY Beat deletes at once, no question asked", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   const { id } = await drive<{ id: string }>(page, "group", { node_ids: ["sc-03"], label: "Lonely" });
   await drive(page, "set_parent", { id: "sc-03", parent_id: null });
   await drive(page, "move_node", { id: "sc-03", x: 1400, y: 900 });
@@ -132,7 +132,7 @@ test("an EMPTY Beat deletes at once, no question asked", async ({ page }) => {
 });
 
 test("the agent's delete_container has both modes and refuses a leaf", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   const before = await absolute(page, "sc-02");
   await expect(drive(page, "delete_container", { id: "sc-03", mode: "all" })).rejects.toThrow(/not a Beat/);
   await expect(drive(page, "delete_container", { id: "beat-1" })).rejects.toThrow(/mode must be/);
@@ -151,7 +151,7 @@ test("the agent's delete_container has both modes and refuses a leaf", async ({ 
 });
 
 test("right-click on a Beat's body opens the palette at the cursor; a picked Scene lands inside the Beat", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   const beat = page.locator('.react-flow__node[data-id="beat-1"]');
   const palette = page.locator(".bd-palette");
 
@@ -186,7 +186,7 @@ test("right-click on a Beat's body opens the palette at the cursor; a picked Sce
 });
 
 test("the guard does not OVER-refuse: a leaf, a leaf inside the Beat, and an EMPTY Beat all still delete on the Delete key", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
 
   // A plain node on the canvas.
   await page.locator('.react-flow__node[data-id="sc-03"]').click();

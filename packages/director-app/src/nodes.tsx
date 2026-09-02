@@ -40,6 +40,7 @@ import { NoteNode } from "./note-node.jsx";
 import { ACCENT, ContainerToolbar } from "./container-toolbar.jsx";
 import { AssetThumb } from "./asset-thumb.jsx"; // [U14]
 import { Icon } from "./icons.js";
+import { AssetBody, BodyToggle, SceneBody, filledCount } from "./node-body.jsx"; // [U21]
 import { LeafResizeGrip } from "./leaf-resize.jsx"; // [U1]
 import { RenderBadge } from "./render-badge.jsx";
 import { BYPASS_TITLE, headerHandleLayout, leafClassName, leafStyle } from "./node-chrome.js";
@@ -96,10 +97,13 @@ export function SceneNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as SceneData;
   const { ins, outs } = headerHandleLayout(d.ports);
   const collapsed = !!d.collapsed;
-  useLeafInternals(id, collapsed);
+  // [U21] The body changes the card's HEIGHT, so the handles have to be re-measured for it the
+  // same way they are for a collapse — otherwise every wire draws to where the port used to be.
+  const expanded = !collapsed && !!d.expanded;
+  useLeafInternals(id, `${collapsed}|${expanded}`);
   return (
     <div
-      className={leafClassName("bd-scene", { selected: !!selected, promoted: !!d.promoted, bypassed: !!d.bypassed, collapsed })}
+      className={leafClassName("bd-scene", { selected: !!selected, promoted: !!d.promoted, bypassed: !!d.bypassed, collapsed }) + (expanded ? " is-expanded" : "")}
       style={leafStyle(d)}
       title={d.bypassed ? BYPASS_TITLE : undefined}
     >
@@ -133,6 +137,9 @@ export function SceneNode({ id, data, selected }: NodeProps) {
           </div>
         </>
       )}
+      {/* [U21] The editable body, and the strip that opens it. */}
+      {expanded ? <SceneBody id={id} data={d} /> : null}
+      {collapsed ? null : <BodyToggle id={id} expanded={expanded} count={filledCount(d)} />}
       {/* [U1] the resize grip; [U2] a collapsed leaf is header-only, so there is nothing to size. */}
       {collapsed ? null : <LeafResizeGrip />}
     </div>
@@ -143,11 +150,12 @@ export function AssetNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as AssetData;
   const { outs } = headerHandleLayout(d.ports);
   const collapsed = !!d.collapsed;
-  useLeafInternals(id, collapsed);
+  const expanded = !collapsed && !!d.expanded;
+  useLeafInternals(id, `${collapsed}|${expanded}`);
   const icon = <Icon name={d.asset === "character" ? "user" : d.asset === "location" ? "mapPin" : "box"} />;
   return (
     <div
-      className={leafClassName("bd-asset", { selected: !!selected, promoted: !!d.promoted, bypassed: !!d.bypassed, collapsed })}
+      className={leafClassName("bd-asset", { selected: !!selected, promoted: !!d.promoted, bypassed: !!d.bypassed, collapsed }) + (expanded ? " is-expanded" : "")}
       style={leafStyle(d)}
       title={d.bypassed ? BYPASS_TITLE : undefined}
     >
@@ -173,6 +181,8 @@ export function AssetNode({ id, data, selected }: NodeProps) {
           ))}
         </div>
       )}
+      {expanded ? <AssetBody id={id} data={d} /> : null}
+      {collapsed ? null : <BodyToggle id={id} expanded={expanded} />}
       {collapsed ? null : <LeafResizeGrip />}
     </div>
   );

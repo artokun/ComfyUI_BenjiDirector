@@ -1,0 +1,286 @@
+/* [U21] The dopesheet under the canvas.
+   Every colour is a --bd-* token: the sheet is the same surface as the panel, not a widget
+   pasted onto it. Rows are absolutely positioned inside one scroller so the ruler, the clips
+   and the playhead share exactly one coordinate space — a second one would drift. */
+
+.bd-tl {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  min-height: 0;
+  background: var(--bd-bg-2);
+  border-top: 1px solid var(--bd-line);
+  color: var(--bd-text);
+  font-size: var(--bd-fs-xs, 11px);
+  user-select: none;
+}
+
+.bd-tl.is-shut {
+  height: auto;
+}
+
+.bd-tl-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.3rem 0.6rem;
+  background: none;
+  border: 0;
+  color: var(--bd-dim);
+  font: inherit;
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps, 0.08em);
+  cursor: pointer;
+}
+.bd-tl-toggle:hover { color: var(--bd-text); background: var(--bd-fill-3); }
+
+/* The resize grip is the top edge itself: a 5px band that reads as a border until you touch it. */
+.bd-tl-grip {
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 5px;
+  cursor: ns-resize;
+  z-index: 3;
+}
+.bd-tl-grip:hover { background: var(--bd-accent-30); }
+
+.bd-tl-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 34px;
+  flex: none;
+  padding: 0 0.5rem;
+  border-bottom: 1px solid var(--bd-line-soft);
+  color: var(--bd-dim);
+}
+.bd-tl-caret {
+  display: inline-flex;
+  padding: 2px;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.bd-tl-caret:hover { color: var(--bd-text); }
+.bd-tl-title {
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps, 0.08em);
+  font-weight: 600;
+  color: var(--bd-text);
+}
+.bd-tl-total {
+  font-variant-numeric: tabular-nums;
+  color: var(--bd-text);
+  background: var(--bd-fill-5);
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-pill);
+  padding: 0 0.45rem;
+}
+.bd-tl-muted { color: var(--bd-bypass); opacity: 0.8; }
+.bd-tl-grow { flex: 1; }
+.bd-tl-play {
+  font-variant-numeric: tabular-nums;
+  color: var(--bd-accent);
+}
+
+.bd-tl-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── the sticky left column of row names ── */
+.bd-tl-gutter {
+  flex: none;
+  border-right: 1px solid var(--bd-line);
+  background: var(--bd-bg);
+  overflow: hidden;
+}
+.bd-tl-rulerpad { border-bottom: 1px solid var(--bd-line-soft); }
+
+.bd-tl-rowhead {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0 0.5rem;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--bd-line-soft);
+  color: var(--bd-dim);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  box-sizing: border-box;
+}
+button.bd-tl-rowhead { cursor: pointer; }
+button.bd-tl-rowhead:hover { background: var(--bd-fill-3); color: var(--bd-text); }
+.bd-tl-rowhead.is-film { color: var(--bd-text); font-weight: 600; }
+.bd-tl-rowhead.is-on { box-shadow: inset 2px 0 0 var(--bd-accent); color: var(--bd-text); }
+.bd-tl-rowname {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bd-tl-rowlen {
+  font-variant-numeric: tabular-nums;
+  color: var(--bd-faint);
+  flex: none;
+}
+
+/* ── the track ── */
+.bd-tl-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+.bd-tl-canvas { position: relative; }
+
+.bd-tl-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bd-bg-2);
+  border-bottom: 1px solid var(--bd-line-soft);
+  cursor: col-resize;
+}
+.bd-tl-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  pointer-events: none;
+}
+.bd-tl-tick i {
+  width: 1px;
+  height: 100%;
+  background: var(--bd-grid-soft);
+}
+.bd-tl-tick b {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--bd-faint);
+  padding-left: 2px;
+}
+
+.bd-tl-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid var(--bd-line-soft);
+}
+.bd-tl-row.is-film { background: var(--bd-fill-3); }
+.bd-tl-row.is-drop { background: var(--bd-accent-10); }
+
+/* A Beat's own span, drawn behind its clips. */
+.bd-tl-span {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: var(--bd-r-sm);
+  background: var(--bd-fill-5);
+  pointer-events: none;
+}
+
+.bd-tl-clip {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow: hidden;
+  padding: 0 0.35rem;
+  box-sizing: border-box;
+  background: var(--bd-node);
+  border: 1px solid var(--bd-line-2);
+  border-radius: var(--bd-r-sm);
+  color: var(--bd-text-node);
+  cursor: grab;
+  transition: box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bd-tl-clip:hover { border-color: var(--bd-ring); }
+.bd-tl-clip.is-on {
+  outline: 1px solid var(--bd-accent);
+  outline-offset: -1px;
+  color: var(--bd-text);
+}
+.bd-tl-clip.is-dragging {
+  cursor: grabbing;
+  z-index: 4;
+  box-shadow: var(--bd-shadow);
+  opacity: 0.92;
+}
+.bd-tl-clip.is-muted {
+  opacity: 0.42;
+  border-style: dashed;
+  border-color: var(--bd-bypass);
+}
+.bd-tl-clip.is-queued { border-left: 3px solid var(--bd-warn); }
+.bd-tl-clip.is-rendering { border-left: 3px solid var(--bd-run); box-shadow: var(--bd-glow-run); }
+.bd-tl-clip.is-failed { border-left: 3px solid var(--bd-bad); }
+.bd-tl-clip.is-rendered { border-left: 3px solid var(--bd-ok); }
+
+.bd-tl-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--bd-info-10);
+  pointer-events: none;
+}
+.bd-tl-cliplabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.bd-tl-clipsec {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--bd-faint);
+  pointer-events: none;
+}
+
+/* The resize handle is inside the clip's right edge and wider than it looks, because a 1px
+   target on a 12px clip is not a target. */
+.bd-tl-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+.bd-tl-handle:hover { background: var(--bd-accent-30); }
+
+.bd-tl-playhead {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: var(--bd-accent);
+  pointer-events: none;
+  z-index: 3;
+}
+.bd-tl-playhead::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 9px;
+  height: 9px;
+  background: var(--bd-accent);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}

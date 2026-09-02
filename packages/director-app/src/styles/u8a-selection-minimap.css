@@ -5,9 +5,16 @@
  * mini-toolbar reads on a plush, rounded page. Tokens only — it follows the theme.
  */
 
+/* [U21] Anchored to the BOTTOM, not the top.
+   A node's own toolbar renders directly ABOVE that node and lives inside `.react-flow`, which
+   is its own stacking context at z-index 0 — so the toolbar's z-index 1000 is trapped below
+   this pill's 15 whatever either says, and wherever they overlap the pill takes the click.
+   At the top of the canvas that collision is routine: select a Beat near the top and its
+   Group/Collapse/Delete bar lands underneath this. At the bottom it cannot happen, because a
+   node whose toolbar would reach here is itself already off the bottom edge. */
 .bd-selpill {
   position: absolute;
-  top: 14px;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 15;
@@ -27,7 +34,7 @@
 @keyframes bd-selpill-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-6px);
+    transform: translateX(-50%) translateY(6px);
   }
   to {
     opacity: 1;

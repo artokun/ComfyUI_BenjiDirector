@@ -206,9 +206,9 @@ export function LeafHub({ side, ports }: { side: "in" | "out"; ports: PortInfo[]
  * the OLD handle positions and every wire to the card renders to a point that is no longer
  * on it — the same class of wrongness as mispositioning the handle itself.
  */
-export function useLeafInternals(id: string, collapsed: boolean): void {
+export function useLeafInternals(id: string, state: string | boolean): void {
   const updateInternals = useUpdateNodeInternals();
   useEffect(() => {
     updateInternals(id);
-  }, [id, collapsed, updateInternals]);
+  }, [id, state, updateInternals]);
 }

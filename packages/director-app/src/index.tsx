@@ -34,6 +34,7 @@ import "./RenderPanel.jsx"; // U15
 import "./WorkflowsPanel.jsx"; // U16
 import "./QueuePanel.jsx"; // U17
 import "./PlaygroundPanel.jsx"; // U18
+import "./Timeline.jsx"; import "./node-body.jsx"; import "./u21.drive.js"; // U21 — the dopesheet and the node bodies
 // U19 (styles only)
 
 export interface MountOptions {

@@ -97,6 +97,7 @@ import { isRefusal, rejoinReroute, spliceReroute } from "./reroute-ops.js"; // [
 import { Palette, type PaletteItem } from "./palette.jsx";
 // ── [U0] foundation ──
 import { canonicalEdgeChanges, proxyHandlesFor, useDisplayedGraph } from "./collapse-view.js";
+import { cutOf, reorderCut, type TimelineNode } from "./timeline-model.js"; // [U21]
 import { DirectorContext, type DirectorCtx } from "./director-context.jsx";
 import { resolveDrive, type DriveKit } from "./drive-registry.js";
 import { Icon } from "./icons.jsx";
@@ -1555,6 +1556,90 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
           settle(ns.map((n) => (n.id === nodeId && n.data.kind === "note" ? ({ ...n, data: { ...n.data, text } } as RFNode) : n)), es, { reparent: false });
         });
       },
+      // [U21] The card's third state. Not a graph edit — no undo step, no write-back — but it
+      // changes the node's measured height, so it still goes through settle.
+      setNodeExpanded(nodeId, expanded) {
+        withCurrent(
+          (ns, es) => {
+            const target = ns.find((n) => n.id === nodeId);
+            if (!target) return setNote(`no node "${nodeId}"`);
+            if (isContainer(target)) return setNote(`${target.data.label} is a Beat — it collapses, it does not expand`);
+            // Expanding a collapsed card opens it: the two states are exclusive, and leaving
+            // both on renders a header with a body hanging off it.
+            // An open card is TALLER than a shut one and will overlap whatever sits below it,
+            // so opening one brings it to the front of the leaf stack ([U1]'s z-order). A card
+            // you opened and cannot read is not open.
+            const next = ns.map((n) => (n.id === nodeId ? ({ ...n, data: { ...n.data, expanded, ...(expanded ? { collapsed: false } : {}) } } as RFNode) : n));
+            settle(expanded ? applyZOrder(next, nodeId) : next, es, { reparent: false, sync: false });
+            return undefined;
+          },
+          { history: false },
+        );
+      },
+      moveToBeat(nodeId, containerId) {
+        withCurrent((ns, es) => {
+          const core = asCore(ns);
+          const node = core.find((n) => n.id === nodeId);
+          if (!node) return setNote(`no node "${nodeId}"`);
+          const target = containerId ? core.find((n) => n.id === containerId) : null;
+          if (containerId && !target) return setNote(`no Beat "${containerId}"`);
+          if (target && !isContainer(target as unknown as RFNode)) return setNote(`${target.data.label} is not a Beat`);
+          // A container cannot go inside itself or its own child; only scenes are dragged on
+          // the sheet, but the guard is cheap and a cycle is unrecoverable.
+          if (containerId && (containerId === nodeId || descendantsOf(core, nodeId).some((d) => d.id === containerId))) {
+            return setNote("a Beat cannot go inside itself");
+          }
+          if ((node.parentId ?? null) === (containerId ?? null)) return undefined;
+          const abs = absolutePos(node, core);
+          const base = target ? absolutePos(target, core) : { x: 0, y: 0 };
+          setNote(containerId ? `moved ${node.data.label} into ${target?.data.label ?? containerId}` : `moved ${node.data.label} out of its Beat`);
+          settle(
+            ns.map((n) => (n.id === nodeId ? ({ ...n, parentId: containerId ?? undefined, position: { x: Math.round(abs.x - base.x), y: Math.round(abs.y - base.y) } } as RFNode) : n)),
+            es,
+            { reparent: false },
+          );
+          return undefined;
+        });
+      },
+      reorderScene(nodeId, toIndex) {
+        const all = asCore(nodesRef.current as RFNode[]);
+        const order = cutOf(all as unknown as TimelineNode[]);
+        if (!order.includes(nodeId)) return setNote(`${nodeId} is not a scene, so it is not in the cut`);
+        const next = reorderCut(order, nodeId, toIndex);
+        if (next.join(" ") === order.join(" ")) return undefined;
+        const rank = new Map(next.map((id, i) => [id, i] as const));
+        const renumber = (ns: RFNode[]) =>
+          ns.map((n) => (rank.has(n.id) && (n.data as SceneData).orderIndex !== rank.get(n.id) ? ({ ...n, data: { ...n.data, orderIndex: rank.get(n.id) } } as RFNode) : n));
+        const pid = loadedProjectRef.current;
+        const ids = next.map((id) => (calliopeRef(id)?.kind === "scene" ? (calliopeRef(id) as { id: number }).id : null));
+        // A cut that is not entirely Calliope's is the canvas's own: renumber it here and
+        // write nothing, because there is no row list to send.
+        if (pid === null || ids.some((x) => x === null)) {
+          withCurrent((ns, es) => {
+            setNote(`re-cut: ${next.length} scene${next.length === 1 ? "" : "s"}`);
+            settle(renumber(ns), es, { reparent: false });
+          });
+          return undefined;
+        }
+        // Calliope owns `order_index`, so it does the reorder and the canvas takes the ECHO.
+        // The full id list keeps the numbering contiguous, the way its own script stage does.
+        setSyncState("saving");
+        void (async () => {
+          try {
+            const res = (await client.scenes.reorder(pid, { scene_ids: ids as number[] })) as { scenes?: SceneRow[] } | null;
+            const rows = res?.scenes ?? null;
+            withCurrent((ns, es) => {
+              setNote(`re-cut ${next.length} scenes`);
+              settle(rows ? asRF(withOrderIndexes(asCore(renumber(ns)), rows)) : renumber(ns), es, { reparent: false, sync: false });
+            });
+            setSyncState("saved");
+          } catch (err) {
+            setSyncState("error");
+            setNote(`Calliope would not re-cut the film: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        })();
+        return undefined;
+      },
       togglePin(nodeId) {
         withCurrent((ns, es) => {
           settle(
@@ -1620,7 +1705,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         return undefined;
       },
     }),
-    [commitBlueprint, convert, settle, withCurrent],
+    [client, commitBlueprint, convert, settle, withCurrent],
   );
 
   const edgeActions: EdgeActions = useMemo(

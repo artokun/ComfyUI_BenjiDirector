@@ -56,6 +56,11 @@ Args are a flat object. Ids come from `outline`. Positions are absolute canvas c
 | U12 | `inspect` | `id` (opens the inspector on a node); internal-only `if_unselected` re-selects only while nothing else is |
 | U14 | `assets_generate` etc. go through `calliope` (`assets.generate`) — no new command |
 | U15 | `render_scene` | `scene_id` (opens the composer on a scene) |
+| U21 | `set_expanded` | `id`, `expanded?` (omit to toggle) — opens a card's editable body |
+| U21 | `set_duration` | `id`, `seconds` → `{id, durationSec}` |
+| U21 | `reorder_scene` | `id`, `to` — the CUT (`order_index`); `to` counts the film WITHOUT the moved scene |
+| U21 | `move_to_beat` | `id`, `beat` (a container id, or `null` for no Beat) |
+| U21 | `timeline` | — → `{duration, durationClock, mutedSec, cut[], rows[], clips[]}`, the dopesheet as data |
 
 Tool-side mapping (comfyui-mcp, U20): graph commands become `panel_director_graph` actions,
 container/blueprint commands `panel_director_subgraph` actions, everything Calliope-shaped

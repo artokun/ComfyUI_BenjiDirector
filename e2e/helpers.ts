@@ -21,8 +21,24 @@ export function drive<T = unknown>(page: Page, name: string, args?: Record<strin
   return page.evaluate(([n, a]) => (window as unknown as { __director: Handle }).__director.drive(n as string, a), [name, args] as const) as Promise<T>;
 }
 
-/** The demo project is loaded and laid out: 6 nodes, at least 4 wires drawn. */
-export async function waitForDemo(page: Page): Promise<void> {
+/**
+ * The demo project is loaded and laid out: 6 nodes, at least 4 wires drawn.
+ *
+ * `timeline: false` shuts the dopesheet dock before the page loads. A spec about CANVAS
+ * geometry — dragging a corner grip, clicking a card the fitted layout would otherwise put
+ * under the minimap — wants the whole canvas, and the dock takes 168px of it. It is the same
+ * switch the caret in the dock's header flips, seeded before the first render.
+ */
+export async function waitForDemo(page: Page, opts: { timeline?: boolean } = {}): Promise<void> {
+  if (opts.timeline === false) {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("benjidirector/timeline", JSON.stringify({ height: 168, open: false, pps: null }));
+      } catch {
+        /* a browser that refuses storage still runs the spec, just with the dock open */
+      }
+    });
+  }
   await page.goto("/");
   await page.locator(".react-flow__node").nth(5).waitFor();
   await page.waitForFunction(() => document.querySelectorAll(".react-flow__edge").length >= 4);

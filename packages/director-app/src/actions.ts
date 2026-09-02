@@ -48,6 +48,24 @@ export interface EditorActions {
   deleteBlueprint(blueprintId: string, opts?: { confirm?: boolean }): void;
   /** [U9] Edit a note's markdown. */
   setNoteText(nodeId: string, text: string): void;
+  /** [U21] Open a leaf's editable body — the third state, between collapsed and header-only. */
+  setNodeExpanded(nodeId: string, expanded: boolean): void;
+  /**
+   * [U21] Move a scene into a Beat, or out of every Beat with `null`.
+   *
+   * The same write dragging a card into a Beat makes (`beat_id`), reached from the dopesheet
+   * where the Beat is a ROW rather than a box. Absolute position is preserved, so the card does
+   * not jump on the canvas when the sheet moves it.
+   */
+  moveToBeat(nodeId: string, containerId: string | null): void;
+  /**
+   * [U21] Move a scene to `toIndex` in the CUT — `order_index`, the film's real timeline.
+   *
+   * The one edit the canvas refuses to infer: `calliope-sync` will not read a cut out of
+   * geometry, because tidying a canvas must never re-cut a film. A drag along a time axis is
+   * not geometry, it is the statement "this plays later", so it lands here.
+   */
+  reorderScene(nodeId: string, toIndex: number): void;
 }
 
 export const ActionsContext = createContext<EditorActions | null>(null);

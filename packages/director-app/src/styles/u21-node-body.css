@@ -1,0 +1,91 @@
+/* [U21] The card's editable body, and the strip that opens it.
+
+   An expanded card sizes itself: `leafStyle` gives a card its stored width and height, and a
+   body inside a fixed height would just be clipped. So `is-expanded` releases the height and
+   sets a comfortable minimum width — the card grows downward, the way a form does. */
+
+.bd-scene.is-expanded,
+.bd-asset.is-expanded {
+  height: auto !important;
+  min-width: 232px;
+}
+
+.bd-nb {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.35rem 0.45rem 0.1rem;
+  border-top: 1px solid var(--bd-line-soft);
+  cursor: default;
+}
+
+.bd-nb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.bd-nb-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+.bd-nb-row .bd-nb-label { flex: none; }
+.bd-nb-range { flex: 1; min-width: 0; }
+
+.bd-nb-label {
+  font-size: var(--bd-fs-2xs, 9px);
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps, 0.08em);
+  color: var(--bd-dim);
+}
+
+.bd-nb-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-size: var(--bd-fs-xs, 11px);
+  line-height: 1.35;
+}
+.bd-nb-mono { font-family: var(--bd-mono, ui-monospace, monospace); }
+
+.bd-nb-hint {
+  margin: 0;
+  font-size: var(--bd-fs-2xs, 9px);
+  color: var(--bd-faint);
+  line-height: 1.4;
+}
+
+/* The expander is a full-width strip on the card's bottom edge: its own row, because the
+   header already carries the collapse chevron, the title, the duration chip and the tip. */
+.bd-nb-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 2px 0 3px;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--bd-line-soft);
+  border-radius: 0 0 var(--bd-radius-sm) var(--bd-radius-sm);
+  color: var(--bd-faint);
+  font: inherit;
+  font-size: var(--bd-fs-2xs, 9px);
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps, 0.08em);
+  cursor: pointer;
+  transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1), background 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bd-nb-toggle:hover { color: var(--bd-text); background: var(--bd-fill-5); }
+.bd-nb-toggle.is-open { color: var(--bd-accent); }
+
+/* A dot per field that already has something in it, so a shut card still says it has content. */
+.bd-nb-count {
+  min-width: 13px;
+  padding: 0 3px;
+  border-radius: var(--bd-r-pill);
+  background: var(--bd-fill-8);
+  color: var(--bd-dim);
+  font-variant-numeric: tabular-nums;
+}

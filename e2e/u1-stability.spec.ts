@@ -61,7 +61,7 @@ async function bodyPoint(page: Page, id: string): Promise<{ x: number; y: number
 }
 
 test("a Scene grows when dragged by its corner grip, and the size lands on the node", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   await expect(page.locator('.react-flow__node[data-id="sc-03"] .bd-grip')).toBeAttached();
   const before = await nodeBox(page, "sc-03");
   const beforeNode = await drive<{ width?: number; height?: number }>(page, "read_node", { id: "sc-03" });
@@ -80,7 +80,7 @@ test("a Scene grows when dragged by its corner grip, and the size lands on the n
 });
 
 test("beat-1 resizes by its corner; a collapsed Beat by its width-only edge", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   const beat = page.locator('.react-flow__node[data-id="beat-1"]');
   await beat.locator(".bd-group-title").click();
   await expect(beat.locator(".react-flow__resize-control.handle")).toHaveCount(4);
@@ -109,7 +109,7 @@ test("beat-1 resizes by its corner; a collapsed Beat by its width-only edge", as
 });
 
 test("a Beat is selected by its body and dragged by it, children along", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   const p = await bodyPoint(page, "beat-1");
   await page.mouse.click(p.x, p.y);
   await expect(page.locator('.react-flow__node[data-id="beat-1"] .bd-group')).toHaveClass(/is-selected/);
@@ -129,7 +129,7 @@ test("a Beat is selected by its body and dragged by it, children along", async (
 });
 
 test("a wire crossing a Beat body stays hoverable and clickable; screenshot", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   // The demo's sc-02 (inside beat-1) → sc-03 (outside) wire already runs out through the
   // Beat's empty right half. Dragging sc-03 *into* the Beat instead would put a card over
   // the wire — legitimate, since a node sits above an edge, but then there is no open body

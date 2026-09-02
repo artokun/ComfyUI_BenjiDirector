@@ -66,13 +66,16 @@ export interface IntentFailure {
 
 /** A rename of a row that is not a scene: a Beat's title, or an asset's name. */
 export type StoryIntent =
-  | { kind: "beat"; id: number; title: string }
-  | { kind: "character" | "location" | "item"; id: number; name: string };
+  | { kind: "beat"; id: number; title?: string }
+  // [U21] `consistency_prompt` is the wording every render of the asset reuses; the card's
+  // body edits it. Both keys are optional and only what CHANGED is sent, so a prompt edit
+  // never re-asserts a name and vice versa.
+  | { kind: "character" | "location" | "item"; id: number; name?: string; consistency_prompt?: string };
 
 export interface StoryFailure {
   kind: StoryIntent["kind"];
   id: number;
-  field: "title" | "name" | "network";
+  field: "title" | "name" | "consistency_prompt" | "network";
   error: string;
 }
 
@@ -230,6 +233,16 @@ export function diffForCalliope(prev: Snapshot, next: Snapshot, ctx: DiffContext
       intent.duration_sec = now.durationSec;
       touched = true;
     }
+    // [U21] The card's body writes action and dialog. Empty is a real value here — clearing an
+    // action line is an edit — so the comparison is against the PREVIOUS node, not against "".
+    if (was && now.action !== was.action && now.action !== undefined) {
+      intent.action = now.action;
+      touched = true;
+    }
+    if (was && now.dialog !== was.dialog && now.dialog !== undefined) {
+      intent.dialog = now.dialog;
+      touched = true;
+    }
     const beatNow = beatIdOf(n.parentId);
     const beatWas = before ? beatIdOf(before.parentId) : beatNow;
     if (before && beatNow !== beatWas) {
@@ -286,6 +299,14 @@ export function diffStoryForCalliope(prev: Snapshot, next: Snapshot): StoryInten
     const before = prevById.get(n.id);
     if (!before) continue;
     const label = n.data.label;
+    // [U21] The consistency prompt travels with the rename check, so one settle can carry both.
+    if (ref.kind !== "beat") {
+      const now = (n.data as { consistencyPrompt?: string | null }).consistencyPrompt;
+      const was = (before.data as { consistencyPrompt?: string | null }).consistencyPrompt;
+      // `undefined` is "this node never carried one" — a node built before the loader filled it
+      // in. Sending that would blank the row, so only a real string counts as an edit.
+      if (typeof now === "string" && now !== was) out.push({ kind: ref.kind, id: ref.id, consistency_prompt: now });
+    }
     if (label === before.data.label || !label.trim()) continue;
     if (ref.kind === "beat") out.push({ kind: "beat", id: ref.id, title: label });
     else out.push({ kind: ref.kind, id: ref.id, name: label });
@@ -370,18 +391,37 @@ export async function applyStoryIntents(client: CalliopeClient, projectId: numbe
   let applied = 0;
   const failed: StoryFailure[] = [];
   for (const it of intents) {
-    const field = it.kind === "beat" ? "title" : "name";
-    const asked = it.kind === "beat" ? it.title : it.name;
-    let got: unknown;
+    // Only what the diff actually asked for is sent, and EVERY key sent is verified against
+    // the echoed row — a 200 is not evidence the write landed.
+    const body: Record<string, unknown> = {};
+    if (it.kind === "beat") {
+      if (it.title !== undefined) body.title = it.title;
+    } else {
+      if (it.name !== undefined) body.name = it.name;
+      if (it.consistency_prompt !== undefined) body.consistency_prompt = it.consistency_prompt;
+    }
+    if (!Object.keys(body).length) continue;
+    let row: Record<string, unknown>;
     try {
-      if (it.kind === "beat") got = (await client.story.beat.patch(projectId, it.id, { title: it.title })).title;
-      else got = (await client.story[it.kind].patch(projectId, it.id, { name: it.name })).name;
+      row =
+        it.kind === "beat"
+          ? ((await client.story.beat.patch(projectId, it.id, body as never)) as unknown as Record<string, unknown>)
+          : ((await client.story[it.kind].patch(projectId, it.id, body as never)) as unknown as Record<string, unknown>);
     } catch (err) {
       failed.push({ kind: it.kind, id: it.id, field: "network", error: err instanceof Error ? err.message : String(err) });
       continue;
     }
-    if (got !== asked) failed.push({ kind: it.kind, id: it.id, field, error: `Calliope accepted the PATCH but did not apply ${field}=${JSON.stringify(asked)} (row still has ${JSON.stringify(got)})` });
-    else applied += 1;
+    const refused = Object.entries(body).filter(([k, asked]) => row?.[k] !== asked);
+    if (refused.length) {
+      for (const [k, asked] of refused) {
+        failed.push({
+          kind: it.kind,
+          id: it.id,
+          field: k as StoryFailure["field"],
+          error: `Calliope accepted the PATCH but did not apply ${k}=${JSON.stringify(asked)} (row still has ${JSON.stringify(row?.[k])})`,
+        });
+      }
+    } else applied += 1;
   }
   return { applied, failed };
 }

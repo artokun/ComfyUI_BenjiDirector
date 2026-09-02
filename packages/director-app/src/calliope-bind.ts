@@ -75,6 +75,14 @@ const SCENE_TOP_MIN = 30;
 
 /** [U14] Carry the row's sheet / reference image onto the node, so the card can show it. */
 const withImage = (n: DirectorNode, path: unknown): DirectorNode => ({ ...n, data: { ...(n.data as AssetData), imagePath: typeof path === "string" && path ? path : null } });
+/**
+ * [U21] The row's consistency prompt, carried onto the node.
+ *
+ * The card's body EDITS this and writes on blur, so the node has to start out holding the row's
+ * current text — a node that carried nothing would blank the row the first time anyone opened
+ * the card and clicked away.
+ */
+const withPrompt = (n: DirectorNode, prompt: unknown): DirectorNode => ({ ...n, data: { ...(n.data as AssetData), consistencyPrompt: typeof prompt === "string" ? prompt : null } });
 
 const link = (source: string, sourceHandle: string, target: string, targetHandle: string): GraphEdge => ({
   id: `lg:${sourceHandle}->${targetHandle}`,
@@ -93,15 +101,15 @@ export function projectToGraph(data: CalliopeProjectData): { nodes: DirectorNode
   // ── assets down the left ──
   let ay = 60;
   for (const c of story.characters) {
-    nodes.push(withImage(asset(calId.character(c.id), c.name, "character", { x: ASSET_X, y: ay }), c.sheet_path)); // [U14]
+    nodes.push(withPrompt(withImage(asset(calId.character(c.id), c.name, "character", { x: ASSET_X, y: ay }), c.sheet_path), c.consistency_prompt)); // [U14] [U21]
     ay += ASSET_GAP;
   }
   for (const l of story.locations) {
-    nodes.push(withImage(asset(calId.location(l.id), l.name, "location", { x: ASSET_X, y: ay }), l.reference_image_path)); // [U14]
+    nodes.push(withPrompt(withImage(asset(calId.location(l.id), l.name, "location", { x: ASSET_X, y: ay }), l.reference_image_path), l.consistency_prompt)); // [U14] [U21]
     ay += ASSET_GAP;
   }
   for (const it of story.items) {
-    nodes.push(withImage(asset(calId.item(it.id), it.name, "item", { x: ASSET_X, y: ay }), it.reference_image_path)); // [U14]
+    nodes.push(withPrompt(withImage(asset(calId.item(it.id), it.name, "item", { x: ASSET_X, y: ay }), it.reference_image_path), it.consistency_prompt)); // [U14] [U21]
     ay += ASSET_GAP;
   }
 

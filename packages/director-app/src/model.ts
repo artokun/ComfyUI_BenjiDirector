@@ -70,6 +70,8 @@ export interface SceneData extends BaseNodeData {
   color?: string;
   /** Collapsed to its header; handles converge on the header edges. */
   collapsed?: boolean;
+  /** [U21] The third state: the card's editable body is open. Exclusive with `collapsed`. */
+  expanded?: boolean;
   dialog?: string;
   characterIds?: number[];
   locationId?: number | null;
@@ -89,8 +91,17 @@ export interface AssetData extends BaseNodeData {
   bypassed?: boolean;
   color?: string;
   collapsed?: boolean;
+  /** [U21] The third state: the card's editable body is open. Exclusive with `collapsed`. */
+  expanded?: boolean;
   /** Sheet / reference image path (Calliope), shown as a thumbnail. */
   imagePath?: string | null;
+  /**
+   * [U21] The wording every render of this asset reuses (Calliope's `consistency_prompt`).
+   *
+   * LOADED, not invented: the card's body edits it and writes on blur, so a node that did not
+   * carry the row's current text would blank the row the first time anyone opened the card.
+   */
+  consistencyPrompt?: string | null;
 }
 
 /** A markdown sticky note. No ports. */

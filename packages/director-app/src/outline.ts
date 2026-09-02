@@ -38,6 +38,7 @@ export function summarizeNode(n: RFNode): Record<string, unknown> {
         bypassed: !!d.bypassed,
         color: d.color ?? null,
         collapsed: !!d.collapsed,
+        expanded: !!d.expanded,
         renderStatus: d.renderStatus ?? null,
         ports: d.ports.map((p) => ({ id: p.id, type: p.type, isInput: p.isInput, label: p.label })),
       };
@@ -51,7 +52,11 @@ export function summarizeNode(n: RFNode): Record<string, unknown> {
         bypassed: !!d.bypassed,
         color: d.color ?? null,
         collapsed: !!d.collapsed,
+        expanded: !!d.expanded,
         imagePath: d.imagePath ?? null,
+        // [U21] The wording every render of this asset reuses — the card's body edits it, so
+        // an agent that reads a node has to be able to see what it is about to overwrite.
+        consistencyPrompt: d.consistencyPrompt ?? null,
         ports: d.ports.map((p) => ({ id: p.id, type: p.type, isInput: p.isInput, label: p.label })),
       };
     case "note":
