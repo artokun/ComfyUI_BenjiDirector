@@ -13,10 +13,33 @@ import { createElement } from "react";
 import "@xyflow/react/dist/style.css";
 import "./styles.css";
 import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
+// ── feature modules register panels, slots and drive commands on import; one line per unit ──
+// U1 (stability: nothing to import)
+// U2 import "./node-chrome.jsx";
+// U3 import "./useEditorHotkeys.js"; import "./help.jsx";
+// U4 import "./sidebar.jsx"; import "./persistence.js";
+// U5 import "./container-delete.jsx";
+// U6 (collapse-view.ts is imported by DirectorApp)
+// U7 import "./blueprint-modal.jsx";
+// U8a import "./selection-toolbar.jsx";
+// U8b import "./reroute.jsx";
+// U9 import "./note-node.jsx";
+// U10 import "./JobStrip.jsx";
+// U11 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx";
+// U12 import "./Inspector.jsx";
+// U13 (calliope-sync.ts is imported by DirectorApp)
+// U14 import "./AssetsPanel.jsx";
+// U15 import "./RenderPanel.jsx";
+// U16 import "./WorkflowsPanel.jsx";
+// U17 import "./QueuePanel.jsx";
+// U18 import "./PlaygroundPanel.jsx";
+// U19 (styles only)
 
 export interface MountOptions {
   /** Where Calliope lives. Falls back to the client's default. */
   calliopeBaseUrl?: string;
+  /** Markdown → safe HTML for notes and help; the panel passes marked + DOMPurify. */
+  renderMarkdown?: (md: string) => string;
 }
 
 export interface DirectorHandle {
@@ -46,3 +69,6 @@ export function mountDirector(el: HTMLElement, opts: MountOptions = {}): Directo
 
 export { DirectorApp };
 export type { DriveFn };
+export { registerDriveCommands } from "./drive-registry.js";
+export { registerPanel } from "./panels.js";
+export { registerSlot } from "./slots.jsx";

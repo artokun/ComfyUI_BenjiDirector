@@ -93,6 +93,12 @@ the venv, installs the backend, starts it detached on `127.0.0.1:8247`, and wait
 Python 3.11+; ffmpeg only for exporting a film. No LLM endpoint is needed — the agent in
 the panel is the only model in the loop.
 
+## Working on a unit
+
+Twenty features are being built in parallel. Read `docs/worker-notes.md` (ownership rules,
+slots/panels/drive registries, how to verify) and `docs/drive-commands.md` (the command
+vocabulary, frozen) before touching code.
+
 ## Develop
 
 ```bash

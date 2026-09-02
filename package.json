@@ -26,11 +26,15 @@
     "lint": "npm run typecheck && npm run test",
     "sync:panel": "node scripts/sync-to-panel.mjs",
     "calliope:up": "node scripts/calliope-up.mjs",
-    "calliope:check": "node scripts/calliope-up.mjs --check"
+    "calliope:check": "node scripts/calliope-up.mjs --check",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:install": "playwright install chromium"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
     "typescript": "5.7.2",
-    "vitest": "2.1.8"
+    "vitest": "2.1.8",
+    "@playwright/test": "1.49.1",
+    "jsdom": "25.0.1"
   }
 }

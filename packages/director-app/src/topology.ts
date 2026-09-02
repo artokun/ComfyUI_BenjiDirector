@@ -30,6 +30,12 @@ export interface BeatTopology {
 export interface ProjectTopology {
   version: 1;
   beats: Record<string, BeatTopology>;
+  /**
+   * [U0/U4] Anything else the canvas needs to remember per node on a Calliope project that
+   * has no row field for it (notes, leaf collapse/colour/bypass, reroutes). Keyed by node id.
+   * Captured/applied by the persistence unit; ignored until then.
+   */
+  extras?: Record<string, Record<string, unknown>>;
 }
 
 /** container id → rail id → label; what settle applies after reconcile rebuilds the rails. */

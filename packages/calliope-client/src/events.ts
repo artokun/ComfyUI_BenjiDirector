@@ -13,7 +13,12 @@ export interface CalliopeEvent {
   data: Record<string, unknown>;
   /** Wall-clock arrival, for ordering when the payload carries none. */
   at: number;
+  /** The server's own timestamp (ISO), when the frame carried one. */
+  ts?: string;
 }
+
+/** Every named event Calliope publishes outside its own agent harness. */
+export const EVENT_KINDS = ["job.created", "job.started", "job.progress", "job.completed", "job.failed", "job.deleted", "asset.ready", "agent.thinking", "story.ready"] as const;
 
 export interface EventSubscription {
   close(): void;
@@ -44,23 +49,34 @@ export function subscribeEvents(
     // EventSource retries on its own; CLOSED means it has given up.
     onState?.(es.readyState === EventSource.CLOSED ? "closed" : "reconnecting");
   };
+  // The server replays its last 20 events to every new subscriber, so a reconnect re-delivers
+  // frames the pane has already acted on. Dedupe by the server timestamp + kind + job.
+  const seen: string[] = [];
   const deliver = (kind: string, raw: string) => {
     let data: Record<string, unknown> = {};
+    let ts: string | undefined;
     try {
       const parsed = JSON.parse(raw) as unknown;
       if (parsed && typeof parsed === "object") data = parsed as Record<string, unknown>;
-      // Calliope wraps as { type, data } on the default channel; unwrap when it does.
+      // Calliope wraps as { type, data, ts }; unwrap when it does.
       if (typeof data.type === "string" && data.data && typeof data.data === "object") {
         kind = data.type;
+        if (typeof data.ts === "string") ts = data.ts;
         data = data.data as Record<string, unknown>;
       }
     } catch {
       data = { raw };
     }
-    onEvent({ kind, data, at: Date.now() });
+    if (ts) {
+      const key = `${ts}|${kind}|${String(data.job_id ?? data.path ?? "")}`;
+      if (seen.includes(key)) return;
+      seen.push(key);
+      if (seen.length > 64) seen.shift();
+    }
+    onEvent({ kind, data, at: Date.now(), ...(ts ? { ts } : {}) });
   };
   es.onmessage = (m) => deliver("message", String(m.data));
-  for (const k of ["job.started", "job.progress", "job.completed", "job.failed", "asset.ready", "agent.thinking"]) {
+  for (const k of EVENT_KINDS) {
     es.addEventListener(k, (m) => deliver(k, String((m as MessageEvent).data)));
   }
   return {

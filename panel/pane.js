@@ -38,6 +38,15 @@ function ensureCss() {
   // Stamped like the JS import below, so a re-vendor cannot leave a browser on the old CSS.
   link.href = new URL("./style.css?v=__BUNDLE_HASH__", import.meta.url).href;
   document.head.appendChild(link);
+  // Geist (the design language's face). Google Fonts is reachable from the ComfyUI page; if it
+  // is not, the stack falls through to the system UI font and nothing breaks.
+  if (!document.querySelector('link[data-bd-fonts="1"]')) {
+    const fonts = document.createElement("link");
+    fonts.rel = "stylesheet";
+    fonts.dataset.bdFonts = "1";
+    fonts.href = "https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap";
+    document.head.appendChild(fonts);
+  }
 }
 
 /**

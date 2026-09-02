@@ -13,6 +13,7 @@ import {
   type GraphOpsHost,
   type PortInfo,
 } from "@benjidirector/graph-core";
+import type { IconName } from "./icons.js";
 
 /** Port types. Deliberately few — these are the things that actually flow between scenes. */
 export type DirectorPortType = "text" | "ref" | "image" | "video";
@@ -61,6 +62,19 @@ export interface SceneData extends BaseNodeData {
   /** Populated once a render lands. */
   videoPath?: string;
   ports: PortInfo[];
+  // ── [U0] shared fields the units fill ──
+  /** Muted: rendered at low opacity, skipped by render tools. */
+  bypassed?: boolean;
+  /** Per-node tint (header stripe). */
+  color?: string;
+  /** Collapsed to its header; handles converge on the header edges. */
+  collapsed?: boolean;
+  dialog?: string;
+  characterIds?: number[];
+  locationId?: number | null;
+  workflowId?: number | null;
+  /** From the live jobs store: queued | rendering | failed | rendered. */
+  renderStatus?: "queued" | "rendering" | "failed" | "rendered" | null;
 }
 
 /** An asset node — Character / Location / Item, Calliope's reusable consistency records. */
@@ -69,6 +83,27 @@ export interface AssetData extends BaseNodeData {
   promoted?: boolean;
   inSubgraph?: boolean;
   asset: "character" | "location" | "item";
+  ports: PortInfo[];
+  // ── [U0] ──
+  bypassed?: boolean;
+  color?: string;
+  collapsed?: boolean;
+  /** Sheet / reference image path (Calliope), shown as a thumbnail. */
+  imagePath?: string | null;
+}
+
+/** A markdown sticky note. No ports. */
+export interface NoteData extends BaseNodeData {
+  kind: "note";
+  text: string;
+  ports: PortInfo[];
+  color?: string;
+}
+
+/** A pass-through dot on a wire: one typed input, one typed output, same type. */
+export interface RerouteData extends BaseNodeData {
+  kind: "reroute";
+  portType: DirectorPortType;
   ports: PortInfo[];
 }
 
@@ -94,10 +129,26 @@ export interface BeatData extends BaseNodeData, ContainerNodeData {
   collapsedHeight?: number;
 }
 
-export type DirectorData = SceneData | AssetData | BeatData;
+export type DirectorData = SceneData | AssetData | BeatData | NoteData | RerouteData;
 export type DirectorNode = GraphNode<DirectorData>;
 
-export type NodeKind = "scene" | "character" | "location" | "item";
+export type NodeKind = "scene" | "character" | "location" | "item" | "note" | "reroute";
+
+/** What the palette and the sidebar offer, in order. Reroute is placed from an edge, not here. */
+export const PALETTE_KINDS: { kind: NodeKind; label: string; icon: IconName; hint?: string }[] = [
+  { kind: "scene", label: "Scene", icon: "clapper" },
+  { kind: "character", label: "Character", icon: "user" },
+  { kind: "location", label: "Location", icon: "mapPin" },
+  { kind: "item", label: "Item", icon: "box" },
+  { kind: "note", label: "Note", icon: "note", hint: "markdown" },
+];
+
+let idCounter = 0;
+/** A fresh id. Counter-suffixed: two nodes minted in the same millisecond must not collide. */
+export function mintId(prefix: string): string {
+  idCounter = (idCounter + 1) % 46656;
+  return `${prefix}-${Date.now().toString(36)}${idCounter.toString(36).padStart(3, "0")}`;
+}
 
 const p = (
   nodeId: string,
@@ -128,10 +179,11 @@ export const scenePorts = (id: string): PortInfo[] => [
 ];
 
 export const assetPorts = (id: string): PortInfo[] => [p(id, "out", "REF", "ref")];
+export const reroutePorts = (id: string, type: DirectorPortType): PortInfo[] => [p(id, "in", "IN", type), p(id, "out", "OUT", type)];
 
 /** Rebuild a node's ports for a NEW id — used when a blueprint is instantiated. */
-export function reportedPorts(kind: DirectorData["kind"], id: string): PortInfo[] {
-  return kind === "scene" ? scenePorts(id) : kind === "asset" ? assetPorts(id) : [];
+export function reportedPorts(kind: DirectorData["kind"], id: string, portType?: DirectorPortType): PortInfo[] {
+  return kind === "scene" ? scenePorts(id) : kind === "asset" ? assetPorts(id) : kind === "reroute" ? reroutePorts(id, portType ?? "image") : [];
 }
 
 export const scene = (
@@ -185,10 +237,18 @@ export const beat = (
 });
 
 /** Make a node of a palette kind at a position. One place, so every entry point agrees. */
-export function makeNode(kind: NodeKind, at: { x: number; y: number }, stamp = Date.now().toString(36)): DirectorNode {
-  if (kind === "scene") return scene(`sc-${stamp}`, "New scene", at);
-  const label = kind === "character" ? "New character" : kind === "location" ? "New location" : "New item";
-  return asset(`${kind}-${stamp}`, label, kind, at);
+export function makeNode(kind: NodeKind, at: { x: number; y: number }, stamp?: string, opts: { portType?: DirectorPortType; label?: string } = {}): DirectorNode {
+  const id = stamp ? `${kind === "scene" ? "sc" : kind}-${stamp}` : mintId(kind === "scene" ? "sc" : kind);
+  if (kind === "scene") return scene(id, opts.label ?? "New scene", at);
+  if (kind === "note") {
+    return { id, type: "note", position: at, width: 220, height: 120, data: { kind: "note", label: opts.label ?? "Note", text: "", ports: [] } };
+  }
+  if (kind === "reroute") {
+    const portType = opts.portType ?? "image";
+    return { id, type: "reroute", position: at, data: { kind: "reroute", label: "reroute", portType, ports: reroutePorts(id, portType) } };
+  }
+  const label = opts.label ?? (kind === "character" ? "New character" : kind === "location" ? "New location" : "New item");
+  return asset(id, label, kind, at);
 }
 
 /** What graph-core needs from us, and nothing else. */

@@ -43,7 +43,7 @@ import {
   type BoundaryPort,
   type GraphEdge,
   type GraphNode, isRelayHandle } from "@benjidirector/graph-core";
-import { CalliopeClient, probe, resolveConfig, type ReachabilityState, type Schemas } from "@benjidirector/calliope-client";
+import { CalliopeClient, probe, resolveConfig, type JobRow, type ReachabilityState, type SceneRow, type Schemas, type StoryBundle } from "@benjidirector/calliope-client";
 import { calId, calliopeRef, projectToGraph } from "./calliope-bind.js";
 import { applyIntents, diffForCalliope } from "./calliope-sync.js";
 import { applyTopology, captureTopology, loadTopology, saveTopology, type RailLabels } from "./topology.js";
@@ -73,6 +73,16 @@ import {
 } from "./model.js";
 import { nodeTypes } from "./nodes.jsx";
 import { Palette, type PaletteItem } from "./palette.jsx";
+// ── [U0] foundation ──
+import { useDisplayedGraph } from "./collapse-view.js";
+import { DirectorContext, type DirectorCtx } from "./director-context.jsx";
+import { resolveDrive, type DriveKit } from "./drive-registry.js";
+import { Icon } from "./icons.jsx";
+import { ModalProvider } from "./modal.jsx";
+import { summarizeEdge, summarizeNode } from "./outline.js";
+import { usePanels } from "./panels.js";
+import { Slot } from "./slots.jsx";
+import { PALETTE_KINDS } from "./model.js";
 
 // React Flow types node data as an index signature; ours are interfaces. Identical at runtime,
 // so the casts stay confined to these aliases.
@@ -239,9 +249,11 @@ export interface DirectorAppProps {
   calliopeBaseUrl?: string;
   /** Filled by the editor on mount; the bundle's `drive()` calls through it. */
   apiRef?: { current: DriveFn | null };
+  /** Markdown → safe HTML, supplied by the host. */
+  renderMarkdown?: (md: string) => string;
 }
 
-function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
+function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   // Decorate ONCE at state init rather than in a mount effect. An effect that reaches for the
   // `nodes` state of its own first render to rebuild `edges` is a footgun: it ran, produced an
   // empty edge set, and the canvas came up with six nodes and no wires at all.
@@ -262,6 +274,11 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
   /** Each loaded scene's current video_settings, so a director write merges rather than clobbers. */
   const settingsCache = useRef(new Map<number, Record<string, unknown>>());
   const [syncState, setSyncState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  // ── [U0] what the context exposes to modules ──
+  const [project, setProject] = useState<{ story: StoryBundle; scenes: SceneRow[] } | null>(null);
+  const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [activePanel, setActivePanel] = useState<string>("canvas");
 
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
@@ -350,7 +367,25 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
       // settle receives the arrays a caller has ALREADY mutated, so it is the wrong place to
       // snapshot for undo — that recorded the post-change state and made every undo a no-op.
       let core = asCore(ns);
-      if (opts.reparent !== false) core = core.map((n) => containmentFor(n, core));
+      if (opts.reparent !== false) {
+        // A node hidden inside a COLLAPSED container keeps its parent: its relative position
+        // is outside the small collapsed card, so re-parenting by geometry would drop every
+        // child out of a Beat the moment the collapsed card is dragged.
+        const byId = new Map(core.map((n) => [n.id, n] as const));
+        const underCollapsed = (n: GraphNode<DirectorData>): boolean => {
+          let p = n.parentId;
+          const seen = new Set<string>();
+          while (p && !seen.has(p)) {
+            seen.add(p);
+            const a = byId.get(p);
+            if (!a) return false;
+            if ((a.data as BeatData).collapsed) return true;
+            p = a.parentId;
+          }
+          return false;
+        };
+        core = core.map((n) => (underCollapsed(n) ? n : containmentFor(n, core)));
+      }
       core = sortParentsFirst(core);
       let coreEdges = asCoreEdges(es);
       for (const n of core) {
@@ -540,6 +575,7 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
         setNodes(done.nodes);
         setEdges(done.edges);
         setLoadedProject(null);
+        setProject(null);
         setNote("demo project");
         return;
       }
@@ -559,6 +595,7 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
         // left), and nothing would ever write that disagreement back.
         settle(asRF(sortParentsFirst(laid.nodes)), asRFEdges(laid.edges), { sync: false, reparent: false, railLabels: laid.railLabels });
         setLoadedProject(projectId);
+        setProject({ story, scenes: scenesRes.scenes });
         setNote(`loaded “${story.project.title}” — ${story.beats.length} beats, ${scenesRes.scenes.length} scenes, ~${scenesRes.estimated_duration_sec}s`);
       } catch (err) {
         setNote(`could not load project ${projectId}: ${err instanceof Error ? err.message : String(err)}`);
@@ -582,10 +619,11 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
     if (pid === null) return;
     const [story, scenesRes] = await Promise.all([client.story.get(pid), client.scenes.list(pid)]);
     settingsCache.current = new Map(scenesRes.scenes.map((sc) => [sc.id, sc.video_settings ?? {}]));
+    setProject({ story, scenes: scenesRes.scenes });
     const fresh = projectToGraph({ story, scenes: scenesRes.scenes });
     const current = asCore(nodesRef.current as RFNode[]);
     const cur = new Map(current.map((n) => [n.id, n] as const));
-    const KEEP = ["color", "collapsed", "expandedWidth", "expandedHeight", "collapsedWidth", "collapsedHeight", "promoted"] as const;
+    const KEEP = ["color", "collapsed", "expandedWidth", "expandedHeight", "collapsedWidth", "collapsedHeight", "promoted", "bypassed"] as const;
     const merged: GraphNode<DirectorData>[] = fresh.nodes.map((fn) => {
       const c = cur.get(fn.id);
       if (!c) return fn as GraphNode<DirectorData>;
@@ -968,15 +1006,31 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
           );
         });
       },
-      updateNode(nodeId, patch) {
-        withCurrent((ns, es) => {
-          settle(
-            ns.map((n) => (n.id === nodeId ? ({ ...n, data: { ...n.data, ...patch } } as RFNode) : n)),
-            es,
-            { reparent: false },
-          );
-        });
+      updateNode(nodeId, patch, opts) {
+        withCurrent(
+          (ns, es) => {
+            settle(
+              ns.map((n) => (n.id === nodeId ? ({ ...n, data: { ...n.data, ...patch } } as RFNode) : n)),
+              es,
+              { reparent: false },
+            );
+          },
+          { history: opts?.history !== false },
+        );
       },
+      // [U0] stubs — each unit replaces its own method body. Keep the note text; tests grep it.
+      setBypassed: () => setNote("not implemented yet [U2] setBypassed"),
+      setNodeColor: () => setNote("not implemented yet [U2] setNodeColor"),
+      setNodeCollapsed: () => setNote("not implemented yet [U2] setNodeCollapsed"),
+      deleteNode: () => setNote("not implemented yet [U2] deleteNode"),
+      duplicate: () => {
+        setNote("not implemented yet [U3] duplicate");
+        return [];
+      },
+      deleteContainer: () => setNote("not implemented yet [U5] deleteContainer"),
+      updateBlueprint: () => setNote("not implemented yet [U7] updateBlueprint"),
+      deleteBlueprint: () => setNote("not implemented yet [U7] deleteBlueprint"),
+      setNoteText: () => setNote("not implemented yet [U9] setNoteText"),
       togglePin(nodeId) {
         withCurrent((ns, es) => {
           settle(
@@ -1150,23 +1204,27 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
       const i = handle.indexOf(":");
       return i > 0 ? handle.slice(0, i) : handle;
     };
-    const summarize = (n: RFNode) => {
-      const base = { id: n.id, type: n.type, label: n.data.label, parentId: n.parentId ?? null, position: n.position, hidden: !!n.hidden };
-      if (isContainer(n)) {
-        const d = rails(n);
-        return { ...base, collapsed: !!d.collapsed, color: d.color ?? null, promotedIn: d.promotedIn, promotedOut: d.promotedOut, faces: d.faces ?? [], blueprintId: d.blueprintId ?? null };
-      }
-      const d = n.data as SceneData | AssetData;
-      return {
-        ...base,
-        kind: d.kind,
-        ...(d.kind === "scene" ? { heading: d.heading, durationSec: d.durationSec ?? null, videoPath: d.videoPath ?? null } : { asset: d.asset }),
-        promoted: !!d.promoted,
-        inSubgraph: !!d.inSubgraph,
-        ports: d.ports.map((p) => ({ id: p.id, type: p.type, isInput: p.isInput, label: p.label })),
-      };
+    const summarize = summarizeNode;
+    // The kit every registered command receives — the SAME closures the built-ins use.
+    const kit: DriveKit = {
+      run,
+      settle,
+      find,
+      num,
+      str,
+      isContainer,
+      handleTypes,
+      makeNode: (kind, at, label) => makeNode(kind, at, undefined, label ? { label } : {}),
+      actions,
+      nodesRef: nodesRef as { current: RFNode[] },
+      edgesRef,
+      setNote,
+      client,
+      loadedProjectRef,
+      refreshProject,
+      loadProject,
+      groupNodes,
     };
-    const summarizeEdge = (e: Edge) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, relay: e.id.endsWith("__inneredge") });
 
     apiRef.current = async (name, args) => {
       switch (name) {
@@ -1176,6 +1234,7 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
           return run((ns) => summarize(find(ns, args.id)), { history: false });
         case "add_node": {
           const kind = str(args.kind, "kind") as NodeKind;
+          if (!PALETTE_KINDS.some((k) => k.kind === kind)) throw new Error(`kind must be one of ${PALETTE_KINDS.map((k) => k.kind).join(", ")}`);
           const node = makeNode(kind, { x: num(args.x, "x"), y: num(args.y, "y") });
           if (typeof args.label === "string" && args.label) {
             node.data = node.data.kind === "scene" ? { ...node.data, label: args.label, heading: args.label } : { ...node.data, label: args.label };
@@ -1410,14 +1469,18 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
             return { id: inst.rootId, blueprint: bp.id };
           });
         }
-        default:
+        default: {
+          // [U0] Feature modules register their commands; the built-ins above stay here.
+          const handler = resolveDrive(name);
+          if (handler) return handler(args, kit);
           throw new Error(`unknown director command "${name}"`);
+        }
       }
     };
     return () => {
       apiRef.current = null;
     };
-  }, [actions, apiRef, groupNodes, settle, withCurrent]);
+  }, [actions, apiRef, client, groupNodes, loadProject, refreshProject, settle, withCurrent]);
 
   // ── palette items ────────────────────────────────────────────────────────────────────
 
@@ -1428,13 +1491,7 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
       const probeNode = makeNode(kind, { x: 0, y: 0 }, "probe");
       return portsOf(probeNode as unknown as RFNode).some((p) => p.type === wire.type && (wire.lookingFor === "input" ? p.isInput : !p.isInput));
     };
-    const kinds: { kind: NodeKind; label: string; icon: string }[] = [
-      { kind: "scene", label: "Scene", icon: "🎬" },
-      { kind: "character", label: "Character", icon: "🧍" },
-      { kind: "location", label: "Location", icon: "🏙️" },
-      { kind: "item", label: "Item", icon: "🎒" },
-    ];
-    const items: PaletteItem[] = kinds.map((k) => ({
+    const items: PaletteItem[] = PALETTE_KINDS.map((k) => ({
       id: `kind:${k.kind}`,
       label: k.label,
       icon: k.icon,
@@ -1443,7 +1500,7 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
       hint: wire && !accepts(k.kind) ? `no ${wire.type} ${wire.lookingFor}` : undefined,
     }));
     for (const bp of Object.values(blueprints).sort((a, b) => b.savedAt - a.savedAt)) {
-      items.push({ id: `bp:${bp.id}`, label: bp.label, icon: "🎞️", group: "Blueprints", hint: `${bp.nodes.length - 1} inside`, disabled: !!wire });
+      items.push({ id: `bp:${bp.id}`, label: bp.label, icon: "film", group: "Blueprints", hint: `${bp.nodes.length - 1} inside`, disabled: !!wire });
     }
     return items;
   }, [blueprints, palette?.wire]);
@@ -1451,13 +1508,48 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
   const beats = (nodes as RFNode[]).filter(isContainer);
   const promoted = beats.filter((b) => b.type === SUBGRAPH_TYPE).length;
 
+  // ── [U0] context for modules, registered panels, displayed graph ──
+  const drive = useCallback<DriveFn>((name, args = {}) => (apiRef?.current ? apiRef.current(name, args) : Promise.reject(new Error("editor not ready"))), [apiRef]);
+  const ctx = useMemo<DirectorCtx>(
+    () => ({
+      client,
+      status,
+      projectId: loadedProject,
+      story: project?.story ?? null,
+      scenes: project?.scenes ?? [],
+      jobs,
+      refresh: refreshProject,
+      loadProject,
+      note,
+      setNote,
+      selectedNodeIds: selectedIds,
+      settingsCache: settingsCache.current,
+      blueprints,
+      drive,
+      setJobs,
+      ...(renderMarkdown ? { renderMarkdown } : {}),
+    }),
+    [blueprints, client, drive, jobs, loadProject, loadedProject, note, project, refreshProject, renderMarkdown, selectedIds, status],
+  );
+  const panelDefs = usePanels();
+  const tabPanels = panelDefs.filter((p) => (p.placement ?? "tab") === "tab");
+  const dockPanels = panelDefs.filter((p) => p.placement === "dock");
+  const activeTab = activePanel !== "canvas" ? tabPanels.find((p) => p.id === activePanel) : undefined;
+  const displayedEdges = useDisplayedGraph(nodes as RFNode[], edges);
+  const onSelectionChange = useCallback(({ nodes: sel }: { nodes: Node[] }) => {
+    const ids = sel.map((n) => n.id);
+    setSelectedIds((cur) => (cur.length === ids.length && cur.every((id, i) => id === ids[i]) ? cur : ids));
+  }, []);
+
   return (
     <ActionsContext.Provider value={actions}>
       <EdgeActionsContext.Provider value={edgeActions}>
         <CarryContext.Provider value={carryRef.current}>
+          <DirectorContext.Provider value={ctx}>
+          <ModalProvider>
           <div className="bd-root">
             <div className="bd-toolbar">
-              <strong className="bd-brand">🎬 Director</strong>
+              <strong className="bd-brand"><Icon name="clapper" /> Director</strong>
               <button type="button" onClick={groupSelection} title="Wrap the selection in a new Beat">Group</button>
               <button
                 type="button"
@@ -1492,7 +1584,9 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
               <span className="bd-stat">
                 {beats.length} beat{beats.length === 1 ? "" : "s"} · {promoted} promoted
               </span>
+              <Slot name="toolbar-left" />
               <span className="bd-spacer" />
+              <Slot name="toolbar-right" />
               {status?.reachable ? (
                 <select
                   className="bd-project"
@@ -1521,10 +1615,32 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
               </span>
             </div>
             {note ? <div className="bd-note">{note}</div> : null}
+            <Slot name="under-toolbar" />
+            {tabPanels.length ? (
+              <div className="bd-tabs" role="tablist">
+                <button type="button" role="tab" className={`bd-tab${activePanel === "canvas" ? " is-active" : ""}`} onClick={() => setActivePanel("canvas")}>
+                  <Icon name="grid" /> Canvas
+                </button>
+                {tabPanels.map((p) => (
+                  <button type="button" role="tab" key={p.id} className={`bd-tab${activePanel === p.id ? " is-active" : ""}`} onClick={() => setActivePanel(p.id)}>
+                    {p.icon ? <Icon name={p.icon} /> : null} {p.label}
+                    {p.badge?.() != null && p.badge() !== "" ? <span className="bd-tab-badge">{p.badge()}</span> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="bd-body">
+              <div className="bd-dock bd-dock-left">
+                <Slot name="left-dock" />
+              </div>
             <div className="bd-canvas" ref={canvasRef}>
               <ReactFlow
                 nodes={nodes}
-                edges={edges}
+                edges={displayedEdges}
+                onSelectionChange={onSelectionChange}
+                elevateNodesOnSelect={true /* [U1] false + zIndex convention */}
+                snapToGrid={false /* [U8a] */}
+                snapGrid={[18, 18]}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeDragStart={onNodeDragStart}
@@ -1549,7 +1665,14 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
               >
                 <Background gap={18} size={1} color="#2a2a35" />
                 <Controls showInteractive={false} />
+                {/* [U8a] <MiniMap /> */}
               </ReactFlow>
+              <Slot name="canvas-overlay" />
+              {activeTab ? (
+                <div className="bd-panel-host" role="tabpanel">
+                  <activeTab.Component />
+                </div>
+              ) : null}
               {palette ? (
                 <Palette
                   x={palette.x}
@@ -1567,7 +1690,17 @@ function Editor({ calliopeBaseUrl, apiRef }: DirectorAppProps) {
                 />
               ) : null}
             </div>
+              <div className="bd-dock bd-dock-right">
+                <Slot name="right-dock" />
+                {dockPanels.map((p) => (
+                  <p.Component key={p.id} />
+                ))}
+              </div>
+            </div>
+            <Slot name="footer" />
           </div>
+          </ModalProvider>
+          </DirectorContext.Provider>
         </CarryContext.Provider>
       </EdgeActionsContext.Provider>
     </ActionsContext.Provider>

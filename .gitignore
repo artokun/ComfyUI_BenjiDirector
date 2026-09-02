@@ -5,3 +5,5 @@ dist/
 .env
 .vite/
 coverage/
+.worktrees/
+e2e/out/

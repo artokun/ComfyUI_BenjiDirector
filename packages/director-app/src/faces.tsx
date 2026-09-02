@@ -7,6 +7,7 @@
 // live here; the rest stays inside.
 
 import { useContext, useState } from "react";
+import { Icon } from "./icons.js";
 import { ActionsContext } from "./actions.js";
 import type { PromotedFace } from "./model.js";
 
@@ -15,7 +16,7 @@ export function FaceRow({ face }: { face: PromotedFace }) {
   const [editing, setEditing] = useState<string | null>(null);
 
   if (face.kind === "asset") {
-    const icon = face.assetKind === "character" ? "🧍" : face.assetKind === "location" ? "🏙️" : "🎒";
+    const icon = <Icon name={face.assetKind === "character" ? "user" : face.assetKind === "location" ? "mapPin" : "box"} />;
     return (
       <div className="bd-face bd-face-asset">
         <span className="bd-face-icon">{icon}</span>

@@ -30,13 +30,20 @@ export interface SceneIntent {
   duration_sec?: number;
   beat_id?: number | null;
   chain_from_prev?: boolean;
-  director?: { position?: { x: number; y: number }; promoted?: boolean };
+  director?: { position?: { x: number; y: number }; promoted?: boolean; bypassed?: boolean; color?: string | null; collapsed?: boolean };
+  // ── [U0] fields the inspector / write-back units send; verified by echo like the rest ──
+  action?: string | null;
+  dialog?: string | null;
+  location_id?: number | null;
+  character_ids?: number[];
+  workflow_id?: number | null;
+  env_image_path?: string | null;
 }
 
 export interface IntentFailure {
   sceneId: number;
   /** Which field Calliope did not apply, or "network" when the request itself failed. */
-  field: "beat_id" | "chain_from_prev" | "heading" | "duration_sec" | "network";
+  field: "beat_id" | "chain_from_prev" | "heading" | "duration_sec" | "action" | "dialog" | "location_id" | "character_ids" | "workflow_id" | "env_image_path" | "network";
   error: string;
 }
 
@@ -149,6 +156,7 @@ export async function applyIntents(
     if (it.duration_sec !== undefined) body.duration_sec = it.duration_sec;
     if (it.beat_id !== undefined) body.beat_id = it.beat_id;
     if (it.chain_from_prev !== undefined) body.chain_from_prev = it.chain_from_prev;
+    for (const k of ["action", "dialog", "location_id", "character_ids", "workflow_id", "env_image_path"] as const) if (it[k] !== undefined) body[k] = it[k];
     if (it.director) {
       const current = settingsCache.get(it.sceneId) ?? {};
       const director = { ...((current.director as Record<string, unknown> | undefined) ?? {}), ...it.director };
@@ -185,6 +193,16 @@ export function verifyEcho(it: SceneIntent, row: SceneRow): IntentFailure | null
   if (it.chain_from_prev !== undefined && !!row.chain_from_prev !== it.chain_from_prev) return say("chain_from_prev", it.chain_from_prev, !!row.chain_from_prev);
   if (it.heading !== undefined && row.heading !== it.heading) return say("heading", it.heading, row.heading);
   if (it.duration_sec !== undefined && row.duration_sec !== it.duration_sec) return say("duration_sec", it.duration_sec, row.duration_sec);
+  if (it.action !== undefined && (row.action ?? null) !== it.action) return say("action", it.action, row.action ?? null);
+  if (it.dialog !== undefined && (row.dialog ?? null) !== it.dialog) return say("dialog", it.dialog, row.dialog ?? null);
+  if (it.location_id !== undefined && (row.location_id ?? null) !== it.location_id) return say("location_id", it.location_id, row.location_id ?? null);
+  if (it.workflow_id !== undefined && (row.workflow_id ?? null) !== it.workflow_id) return say("workflow_id", it.workflow_id, row.workflow_id ?? null);
+  if (it.env_image_path !== undefined && (row.env_image_path ?? null) !== it.env_image_path) return say("env_image_path", it.env_image_path, row.env_image_path ?? null);
+  if (it.character_ids !== undefined) {
+    const a = [...it.character_ids].sort((x, y) => x - y).join(",");
+    const b = [...(row.character_ids ?? [])].sort((x, y) => x - y).join(",");
+    if (a !== b) return say("character_ids", it.character_ids, row.character_ids ?? []);
+  }
   return null;
 }
 

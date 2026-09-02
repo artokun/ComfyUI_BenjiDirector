@@ -6,14 +6,14 @@
 // ESM but makes the load order a thing you have to think about, and nobody should have to.
 
 import { createContext, useContext } from "react";
-import type { AssetData, BeatData, SceneData } from "./model.js";
+import type { AssetData, BeatData, NoteData, RerouteData, SceneData } from "./model.js";
 
 /**
  * A partial write to any node's data. `kind` is omitted from each member on purpose: the
  * plain intersection collapses `"scene" & "asset" & "beat"` to `never` and takes the whole
  * patch type down with it.
  */
-export type NodePatch = Partial<Omit<SceneData, "kind"> & Omit<AssetData, "kind"> & Omit<BeatData, "kind">>;
+export type NodePatch = Partial<Omit<SceneData, "kind"> & Omit<AssetData, "kind"> & Omit<BeatData, "kind"> & Omit<NoteData, "kind"> & Omit<RerouteData, "kind">>;
 
 export interface EditorActions {
   renameRail(containerId: string, side: "in" | "out", portId: string, label: string): void;
@@ -23,9 +23,31 @@ export interface EditorActions {
   renameNode(nodeId: string, label: string): void;
   convertContainer(containerId: string, to: "group" | "subgraph"): void;
   setColor(containerId: string, color: string | undefined): void;
-  /** Merge a partial payload into a node's data. Every compact control writes through here. */
-  updateNode(nodeId: string, patch: NodePatch): void;
+  /**
+   * Merge a partial payload into a node's data. Every compact control writes through here.
+   * `history: false` for per-keystroke edits — a form should not spend the undo stack.
+   */
+  updateNode(nodeId: string, patch: NodePatch, opts?: { history?: boolean }): void;
   saveBlueprint(containerId: string, name?: string): void;
+  // ── [U0] the full surface; bodies filled by the units named. Unfilled ones set a note. ──
+  /** [U2] Mute a leaf: low opacity, skipped by render tools. */
+  setBypassed(nodeId: string, bypassed: boolean): void;
+  /** [U2] Tint a leaf's header. null clears. */
+  setNodeColor(nodeId: string, color: string | null): void;
+  /** [U2] Collapse a leaf to its header (handles converge). */
+  setNodeCollapsed(nodeId: string, collapsed: boolean): void;
+  /** [U2] Delete one leaf node (containers go through deleteContainer). */
+  deleteNode(nodeId: string): void;
+  /** [U3] Duplicate nodes (subtrees), returns the new ids. */
+  duplicate(nodeIds: string[]): string[];
+  /** [U5] Delete a container: everything inside, or only the shell (children re-parent up). */
+  deleteContainer(containerId: string, mode: "all" | "shell"): void;
+  /** [U7] Re-save an existing blueprint from a container. */
+  updateBlueprint(blueprintId: string, containerId?: string): void;
+  /** [U7] Remove a blueprint from the library. */
+  deleteBlueprint(blueprintId: string): void;
+  /** [U9] Edit a note's markdown. */
+  setNoteText(nodeId: string, text: string): void;
 }
 
 export const ActionsContext = createContext<EditorActions | null>(null);

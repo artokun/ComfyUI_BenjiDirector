@@ -35,8 +35,10 @@ import { useEffect, useRef, useState } from "react";
 import { emptySlotHandle, innerHandleId, type BoundaryPort } from "@benjidirector/graph-core";
 import { useActions } from "./actions.js";
 import { FaceRow } from "./faces.jsx";
+import { ACCENT, ContainerToolbar } from "./container-toolbar.jsx";
+import { Icon } from "./icons.js";
+import { RenderBadge } from "./render-badge.jsx";
 import {
-  GROUP_PRESET_COLORS,
   PORT_COLOR,
   type AssetData,
   type BeatData,
@@ -49,7 +51,6 @@ export const PILL_GAP = 6;
 const PILL_MAX_CHARS = 22;
 const PILL_MIN_CHARS = 3;
 
-const ACCENT = "#c084fc";
 
 /** Opaque pill fill derived from the container's tint, so rails read as the same accent. */
 const pillBg = (color: string) => `color-mix(in srgb, #000 55%, ${color})`;
@@ -112,7 +113,7 @@ function PinToolbar({
           actions?.togglePin(id);
         }}
       >
-        📌
+        <Icon name="pin" />
       </button>
     </NodeToolbar>
   );
@@ -129,7 +130,7 @@ export function SceneNode({ id, data, selected }: NodeProps) {
         <span className="bd-title-grow">{d.heading}</span>
         {d.durationSec !== undefined ? <span className="bd-chip">{d.durationSec}s</span> : null}
       </div>
-      {d.videoPath ? <div className="bd-badge">rendered</div> : null}
+      <RenderBadge id={id} videoPath={d.videoPath} />
       <div className="bd-ports">
         {ins.map((p) => (
           <div className="bd-port" key={p.id}>
@@ -151,7 +152,7 @@ export function SceneNode({ id, data, selected }: NodeProps) {
 export function AssetNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as AssetData;
   const out = d.ports[0];
-  const icon = d.asset === "character" ? "🧍" : d.asset === "location" ? "🏙️" : "🎒";
+  const icon = <Icon name={d.asset === "character" ? "user" : d.asset === "location" ? "mapPin" : "box"} />;
   return (
     <div className={`bd-node bd-asset${selected ? " is-selected" : ""}${d.promoted ? " is-promoted" : ""}`}>
       <PinToolbar id={id} promoted={!!d.promoted} visible={!!selected} inSubgraph={!!d.inSubgraph} />
@@ -214,127 +215,6 @@ function EditableTitle({ id, label }: { id: string; label: string }) {
   );
 }
 
-/**
- * A container's own toolbar — convert it, tint it, collapse it, save it as a blueprint —
- * without hunting for the right button in the pane toolbar and hoping the right thing is
- * selected.
- */
-function ContainerToolbar({
-  id,
-  isSubgraph,
-  collapsed,
-  visible,
-  color,
-}: {
-  id: string;
-  isSubgraph: boolean;
-  collapsed?: boolean;
-  visible: boolean;
-  color?: string;
-}) {
-  const actions = useActions();
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  useEffect(() => {
-    if (!visible) setPaletteOpen(false);
-  }, [visible]);
-  return (
-    <NodeToolbar isVisible={visible} position={Position.Top} className="bd-nodebar">
-      <span className="bd-nodebar-kind">{isSubgraph ? "SUBGRAPH" : "GROUP"}</span>
-      <button
-        type="button"
-        className={`bd-tbtn${!isSubgraph ? " is-on" : ""}`}
-        title="Plain group — a box you drag scenes into"
-        onClick={(e) => {
-          e.stopPropagation();
-          actions?.convertContainer(id, "group");
-        }}
-      >
-        Group
-      </button>
-      <button
-        type="button"
-        className={`bd-tbtn${isSubgraph ? " is-on" : ""}`}
-        title="Subgraph — expose its crossings as rails"
-        onClick={(e) => {
-          e.stopPropagation();
-          actions?.convertContainer(id, "subgraph");
-        }}
-      >
-        Subgraph
-      </button>
-      {isSubgraph ? (
-        <button
-          type="button"
-          className="bd-tbtn"
-          title={collapsed ? "Expand" : "Collapse to one card"}
-          onClick={(e) => {
-            e.stopPropagation();
-            actions?.toggleCollapse(id);
-          }}
-        >
-          {collapsed ? "Expand" : "Collapse"}
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="bd-tbtn bd-tbtn-swatch"
-        title="Colour"
-        style={{ background: color ?? ACCENT }}
-        onClick={(e) => {
-          e.stopPropagation();
-          setPaletteOpen((v) => !v);
-        }}
-      />
-      {isSubgraph ? (
-        <button
-          type="button"
-          className="bd-tbtn"
-          title="Save this Beat as a reusable blueprint"
-          onClick={(e) => {
-            e.stopPropagation();
-            actions?.saveBlueprint(id);
-          }}
-        >
-          💾
-        </button>
-      ) : null}
-      {/* The swatch popover lives INSIDE the toolbar: the toolbar is portalled above the canvas,
-          whereas anything rendered inside the container card is trapped under its children. */}
-      {paletteOpen ? (
-        <div className="bd-swatches nodrag" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-          {GROUP_PRESET_COLORS.map((c) => (
-            <button
-              type="button"
-              key={c}
-              className={`bd-swatch${(color ?? ACCENT) === c ? " is-on" : ""}`}
-              style={{ background: c }}
-              title={c}
-              onClick={() => {
-                actions?.setColor(id, c);
-                setPaletteOpen(false);
-              }}
-            />
-          ))}
-          <input
-            className="bd-swatch-hex"
-            type="text"
-            placeholder="#hex"
-            defaultValue={color ?? ""}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter") return;
-              const v = (e.target as HTMLInputElement).value.trim();
-              if (/^#?[0-9a-fA-F]{3,8}$/.test(v)) {
-                actions?.setColor(id, v.startsWith("#") ? v : `#${v}`);
-                setPaletteOpen(false);
-              }
-            }}
-          />
-        </div>
-      ) : null}
-    </NodeToolbar>
-  );
-}
-
 /** An un-promoted Beat: a box you drag scenes into. No rails yet, by definition. */
 export function GroupNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as BeatData;
@@ -352,7 +232,7 @@ export function GroupNode({ id, data, selected }: NodeProps) {
       <NodeResizer minWidth={280} minHeight={200} isVisible={!!selected} color={tint} />
       <ContainerToolbar id={id} isSubgraph={false} visible={!!selected} color={d.color} />
       <div className="bd-group-title">
-        🎞️ <EditableTitle id={id} label={d.label} />
+        <Icon name="film" /> <EditableTitle id={id} label={d.label} />
         <span className="bd-hint">group — make it a subgraph to expose its edges</span>
       </div>
     </div>
@@ -587,7 +467,7 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
           <RailHub containerId={id} side="in" ports={d.promotedIn} tint={tint} />
           {caret}
           <span className="bd-collapsed-title">
-            🎞️ <EditableTitle id={id} label={d.label} />
+            <Icon name="film" /> <EditableTitle id={id} label={d.label} />
           </span>
           <span className="bd-hint">
             {d.promotedIn.length} in · {d.promotedOut.length} out
@@ -621,7 +501,7 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
       <ContainerToolbar id={id} isSubgraph collapsed={false} visible={!!selected} color={d.color} />
       <div className="bd-group-title">
         {caret}
-        🎞️ <EditableTitle id={id} label={d.label} />
+        <Icon name="film" /> <EditableTitle id={id} label={d.label} />
         <span className="bd-hint">
           {d.promotedIn.length} in · {d.promotedOut.length} out
         </span>

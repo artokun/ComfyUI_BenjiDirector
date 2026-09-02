@@ -56,8 +56,56 @@ export interface StoryBundle {
   locations: LocationRow[];
   items: ItemRow[];
 }
-export interface JobRow { id: number; kind: string; status: string; workflow_id: number | null; error: string | null; retry_count: number; [k: string]: unknown }
-export interface WorkflowRow { id: number; name: string; kind: "image" | "video"; is_enabled: boolean; prompt_profile: string; [k: string]: unknown }
+export interface JobRow {
+  id: number;
+  project_id: number | null;
+  scene_id: number | null;
+  kind: "image" | "video" | "export" | string;
+  workflow_id: number | null;
+  status: "pending" | "running" | "done" | "failed" | string;
+  payload: Record<string, unknown>;
+  output_paths: string[];
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  retry_count: number;
+  [k: string]: unknown;
+}
+export interface WorkflowInput { nodeId: string; label: string; role: string | null; kind: string; defaultValue?: unknown; required?: boolean }
+export interface WorkflowOutput { nodeId: string; label: string; role: string | null; kind: string }
+export interface WorkflowRow {
+  id: number;
+  name: string;
+  kind: "image" | "video";
+  is_enabled: boolean;
+  prompt_profile: "prose" | "minimax_h3_ref" | string;
+  description: string | null;
+  input_schema: WorkflowInput[];
+  output_schema: WorkflowOutput[];
+  workflow_json?: unknown;
+  created_at?: string;
+  [k: string]: unknown;
+}
+export interface WorkflowAnalysis { inputs: WorkflowInput[]; outputs: WorkflowOutput[]; suggested_profile: string }
+export interface ProjectStats { scene_count: number; character_count: number; asset_ready_count: number; asset_total_count: number }
+export interface AssetsBundle { characters: CharacterRow[]; locations: LocationRow[]; items: ItemRow[] }
+export interface CalliopeSettings {
+  host?: string;
+  port?: number;
+  data_dir: string;
+  assets_dir: string;
+  comfyui_base_url: string;
+  queue_concurrency: number;
+  queue_poll_interval_sec: number;
+  queue_poll_timeout_sec: number;
+  queue_max_retries: number;
+  dry_run: boolean;
+  [k: string]: unknown;
+}
+export interface PromptPreview { prompt: string; profile: string; from_draft: boolean; based_on: string }
+export interface UploadResult { ok: boolean; path: string; name: string; kind: "image" | "video" | "audio" }
+export interface UploadRow { name: string; path: string; kind: string; size: number; mtime: number }
 
 export type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
@@ -115,6 +163,10 @@ export const ROUTES = {
   playgroundGenerate: ["POST", "/api/playground/generate"],
   playgroundAttach: ["POST", "/api/playground/attach"],
   playgroundUploads: ["GET", "/api/playground/uploads"],
+  playgroundUpload: ["POST", "/api/playground/uploads"],
+  playgroundProject: ["GET", "/api/playground/project"],
+  playgroundJobs: ["GET", "/api/playground/jobs"],
+  playgroundJobDelete: ["DELETE", "/api/playground/jobs/{job_id}"],
   file: ["GET", "/api/file"],
   events: ["GET", "/api/events"],
 } as const satisfies Record<string, readonly [Method, string]>;
@@ -215,13 +267,13 @@ export class CalliopeClient {
   readonly projects = {
     list: () => this.request<Schemas["Project"][]>("projectsList"),
     create: (body: Schemas["ProjectCreate"]) => this.request<Schemas["Project"]>("projectsCreate", { body }),
-    get: (project_id: number) => this.request<Schemas["Project"] & Record<string, unknown>>("projectGet", { params: { project_id } }),
+    get: (project_id: number) => this.request<Schemas["Project"] & { stats?: ProjectStats } & Record<string, unknown>>("projectGet", { params: { project_id } }),
     patch: (project_id: number, body: Schemas["ProjectUpdate"]) => this.request<Schemas["Project"]>("projectPatch", { params: { project_id }, body }),
     delete: (project_id: number) => this.request<unknown>("projectDelete", { params: { project_id } }),
   };
   readonly settings = {
-    get: () => this.request<Record<string, unknown>>("settingsGet"),
-    set: (body: Schemas["SettingsUpdate"]) => this.request<Record<string, unknown>>("settingsSet", { body }),
+    get: () => this.request<CalliopeSettings>("settingsGet"),
+    set: (body: Schemas["SettingsUpdate"]) => this.request<CalliopeSettings>("settingsSet", { body }),
   };
 
   // ── story: beats / characters / locations / items ────────────────────────────
@@ -265,7 +317,7 @@ export class CalliopeClient {
     create: (body: Schemas["WorkflowCreate"]) => this.request<WorkflowRow>("workflowCreate", { body }),
     patch: (workflow_id: number, body: Schemas["WorkflowUpdate"]) => this.request<WorkflowRow>("workflowPatch", { params: { workflow_id }, body }),
     delete: (workflow_id: number) => this.request<unknown>("workflowDelete", { params: { workflow_id } }),
-    analyze: (body: Schemas["WorkflowAnalyze"]) => this.request<Record<string, unknown>>("workflowAnalyze", { body }),
+    analyze: (body: Schemas["WorkflowAnalyze"]) => this.request<WorkflowAnalysis>("workflowAnalyze", { body }),
   };
 
   // ── render: jobs, queue, export ──────────────────────────────────────────────
@@ -278,18 +330,40 @@ export class CalliopeClient {
     queueStatus: () => this.request<Record<string, unknown>>("queueStatus"),
     pause: () => this.request<Record<string, unknown>>("queuePause"),
     resume: () => this.request<Record<string, unknown>>("queueResume"),
-    generateVideos: (project_id: number, body: Schemas["GenerateVideosRequest"]) => this.request<Record<string, unknown>>("videosGenerate", { params: { project_id }, body }),
-    previewPrompt: (project_id: number, body: Schemas["PreviewPromptRequest"]) => this.request<Record<string, unknown>>("previewPrompt", { params: { project_id }, body }),
-    exportFilm: (project_id: number) => this.request<Record<string, unknown>>("exportFilm", { params: { project_id } }),
+    generateVideos: (project_id: number, body: Schemas["GenerateVideosRequest"]) => this.request<{ ok: boolean; jobs: JobRow[] }>("videosGenerate", { params: { project_id }, body }),
+    previewPrompt: (project_id: number, body: Schemas["PreviewPromptRequest"]) => this.request<PromptPreview>("previewPrompt", { params: { project_id }, body }),
+    exportFilm: (project_id: number) => this.request<{ ok: boolean; job: JobRow }>("exportFilm", { params: { project_id } }),
   };
   readonly assets = {
-    list: (project_id: number) => this.request<Record<string, unknown>>("assetsList", { params: { project_id } }),
-    generate: (project_id: number, body: Schemas["GenerateAssetsRequest"]) => this.request<Record<string, unknown>>("assetsGenerate", { params: { project_id }, body }),
+    list: (project_id: number) => this.request<AssetsBundle>("assetsList", { params: { project_id } }),
+    generate: (project_id: number, body: Schemas["GenerateAssetsRequest"]) => this.request<{ ok: boolean; jobs: JobRow[] }>("assetsGenerate", { params: { project_id }, body }),
   };
   readonly playground = {
     generate: (body: Schemas["PlaygroundGenerate"]) => this.request<Record<string, unknown>>("playgroundGenerate", { body }),
     attach: (body: Schemas["PlaygroundAttach"]) => this.request<Record<string, unknown>>("playgroundAttach", { body }),
-    uploads: () => this.request<unknown[]>("playgroundUploads"),
+    uploads: () => this.request<UploadRow[]>("playgroundUploads"),
+    project: () => this.request<Schemas["Project"] & Record<string, unknown>>("playgroundProject"),
+    jobs: (limit = 50) => this.request<JobRow[]>("playgroundJobs", { query: { limit } }),
+    deleteJob: (job_id: number) => this.request<{ ok: boolean; job_id: number; deleted_files: string[]; missing_files: string[] }>("playgroundJobDelete", { params: { job_id } }),
+    /** Multipart upload of an image/video/audio file (≤500 MB). Returns the absolute path Calliope stored it at. */
+    upload: async (file: Blob, name?: string): Promise<UploadResult> => {
+      const [method, template] = ROUTES.playgroundUpload;
+      const form = new FormData();
+      form.append("file", file, name ?? (file as File).name ?? "upload");
+      const res = await fetch(`${this.config.baseUrl}${template}`, { method, body: form });
+      const text = await res.text();
+      let parsed: unknown = text;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        /* keep text */
+      }
+      if (!res.ok) {
+        const detail = (parsed as { detail?: unknown } | null)?.detail;
+        throw new CalliopeError(`Calliope ${method} ${template} → ${res.status}${detail ? `: ${typeof detail === "string" ? detail : JSON.stringify(detail)}` : ""}`, res.status, "playgroundUpload", parsed);
+      }
+      return parsed as UploadResult;
+    },
   };
 
   /**
