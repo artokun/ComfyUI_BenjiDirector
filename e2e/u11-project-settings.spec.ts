@@ -290,6 +290,10 @@ test("with Calliope down the menu still opens, says so, and cannot create", asyn
   const menu = page.getByTestId("u11-project-menu");
   await expect(menu).toContainText("Calliope is not answering");
   await expect(page.getByTestId("u11-new-project")).toBeDisabled();
+  // The menu is a popover over the whole pane, so it is dismissed before reaching for the tab
+  // strip behind it — the same thing a user's hand does.
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
   await page.getByRole("tab", { name: "Settings" }).click();
   await expect(page.getByTestId("u11-calliope-status")).toContainText("unreachable");
   await expect(page.getByTestId("u11-settings-actions")).toContainText("Settings load once Calliope answers.");

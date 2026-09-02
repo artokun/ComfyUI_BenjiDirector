@@ -212,8 +212,17 @@ test("assets: generate all missing, upload your own image, set the cover", async
   await expect(panel.locator('[data-subtab="item"] .bd-assets-count')).toHaveText("1");
   await expect(panel.locator('[data-workflow-select="character"] option')).toHaveCount(1);
   await expect(panel.locator('[data-workflow-select="character"]')).toHaveValue("7");
-  // The prompt-role input is hidden (the card owns the prompt); the other one shows.
-  await expect(panel.locator(".bd-dyn-field")).toHaveCount(1);
+  // The prompt-role input is hidden (the card owns the prompt); the other one is offered.
+  // [U15]'s composer zones its inputs, and a roleless number lands in the Advanced popover
+  // rather than on the face of the panel — so it is reached by opening that, not by counting
+  // fields. What matters is that exactly one input survives and it is the Steps one.
+  await expect(panel.locator(".bd-dyn-field")).toHaveCount(0);
+  await panel.getByRole("button", { name: /Advanced/ }).click();
+  const advanced = panel.locator(".bd-rc-adv .bd-dyn-field");
+  await expect(advanced).toHaveCount(1);
+  await expect(advanced).toContainText("Steps");
+  await expect(advanced.locator("input")).toHaveValue("28");
+  await page.keyboard.press("Escape");
 
   // ── Generate all missing → the three scoped calls, in order ──────────────────
   await panel.getByRole("button", { name: "Generate all missing" }).click();
