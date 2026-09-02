@@ -32,7 +32,7 @@ import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 // U15 import "./RenderPanel.jsx";
 // U16 import "./WorkflowsPanel.jsx";
 // U17 import "./QueuePanel.jsx";
-// U18 import "./PlaygroundPanel.jsx";
+import "./PlaygroundPanel.jsx"; // U18
 // U19 (styles only)
 
 export interface MountOptions {
