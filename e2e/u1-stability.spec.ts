@@ -130,10 +130,12 @@ test("a Beat is selected by its body and dragged by it, children along", async (
 
 test("a wire crossing a Beat body stays hoverable and clickable; screenshot", async ({ page }) => {
   await waitForDemo(page);
-  // Bring sc-03 over the box so the sc-02 → sc-03 wire runs across beat-1's body.
-  await drive(page, "move_node", { id: "sc-03", x: 640, y: 300 });
-  const moved = await drive<{ parentId: string | null }>(page, "read_node", { id: "sc-03" });
-  expect(moved.parentId).toBe("beat-1");
+  // The demo's sc-02 (inside beat-1) → sc-03 (outside) wire already runs out through the
+  // Beat's empty right half. Dragging sc-03 *into* the Beat instead would put a card over
+  // the wire — legitimate, since a node sits above an edge, but then there is no open body
+  // left to test the actual claim on.
+  const outside = await drive<{ parentId: string | null }>(page, "read_node", { id: "sc-03" });
+  expect(outside.parentId, "sc-03 stays outside the Beat").toBeNull();
 
   const edge = page.locator('.react-flow__edge[data-id="lg:sc-02:out:LAST FRAME->sc-03:in:IN FRAME"]');
   await expect(edge).toBeAttached();
@@ -148,10 +150,33 @@ test("a wire crossing a Beat body stays hoverable and clickable; screenshot", as
   expect(my).toBeGreaterThan(beat.y);
   expect(my).toBeLessThan(beat.y + beat.height);
 
-  // Hit-test first: the WIRE is what sits under the pointer there, not the Beat's body.
-  await page.mouse.move(mx + 30, my + 30);
-  const under = await hit(page, mx, my);
-  expect(under.edge, "the wire is under the pointer, above the Beat body").toBe(true);
+  // The claim is "a wire beats the Beat's BODY", not "a wire beats a node card" — a Scene
+  // legitimately sits above a wire, and one may cover the midpoint depending on layout. So
+  // sample along the wire's own path for a point over open Beat body and hit-test THERE.
+  const open = await page.evaluate(
+    ([sel, bx, by, bw, bh]) => {
+      const path = document.querySelector<SVGPathElement>(`${sel} path.react-flow__edge-path`);
+      if (!path) return null;
+      const len = path.getTotalLength();
+      for (let i = 1; i < 60; i++) {
+        const p = path.getPointAtLength((len * i) / 60);
+        const r = path.ownerSVGElement?.getBoundingClientRect();
+        const m = path.getScreenCTM();
+        if (!m || !r) return null;
+        const x = m.a * p.x + m.c * p.y + m.e;
+        const y = m.b * p.x + m.d * p.y + m.f;
+        const inBeat = x > (bx as number) && x < (bx as number) + (bw as number) && y > (by as number) && y < (by as number) + (bh as number);
+        if (!inBeat) continue;
+        const el = document.elementFromPoint(x, y);
+        if (el?.closest(".react-flow__node:not([data-id='beat-1'])")) continue; // a card, not the body
+        return { x, y, edge: !!el?.closest(".react-flow__edge") };
+      }
+      return null;
+    },
+    ['.react-flow__edge[data-id="lg:sc-02:out:LAST FRAME->sc-03:in:IN FRAME"]', beat.x, beat.y, beat.width, beat.height] as const,
+  );
+  expect(open, "found a stretch of wire over open Beat body").not.toBeNull();
+  expect(open?.edge, "the wire is under the pointer, above the Beat body").toBe(true);
 
   await page.mouse.move(mx, my);
   await expect(mid).toHaveCSS("opacity", "1");
@@ -162,7 +187,7 @@ test("a wire crossing a Beat body stays hoverable and clickable; screenshot", as
   // Selection does not reshuffle the stack: select the Beat by its body, the wire still wins.
   await page.keyboard.press("Escape");
   await page.mouse.click(beat.x + beat.width * 0.85, beat.y + beat.height * 0.2);
-  const still = await hit(page, mx, my);
+  const still = await hit(page, open!.x, open!.y);
   expect(still.edge, "still the wire after selecting the Beat").toBe(true);
 
   // A picture of all of it: resized scene, selected Beat, open wire menu.
