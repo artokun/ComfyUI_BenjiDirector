@@ -1,0 +1,134 @@
+/* U2 — leaf-node chrome: the selected-node toolbar, the header chevron + (i), the bypass
+   look and the collapsed-to-header card. Tokens only (--bd-*); the graphite rules from
+   styles.css apply — hairlines, one radius scale, colour only for state. */
+
+/* ── the floating toolbar (React Flow NodeToolbar, portalled above the canvas) ── */
+.bd-leafbar { align-items: center; }
+.bd-leafbar .bd-tbtn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--bd-dim);
+}
+.bd-leafbar .bd-tbtn-icon:hover { color: var(--bd-text); }
+.bd-leafbar .bd-tbtn-icon.is-on {
+  color: var(--bd-bypass);
+  border-color: var(--bd-bypass);
+  background: color-mix(in srgb, var(--bd-bypass) 14%, var(--bd-raised));
+}
+.bd-leafbar .bd-tbtn-danger:hover {
+  color: var(--bd-bad);
+  border-color: var(--bd-bad);
+  background: color-mix(in srgb, var(--bd-bad) 14%, var(--bd-raised));
+}
+.bd-leafbar .bd-pin { display: inline-flex; align-items: center; height: 24px; }
+.bd-leafbar .bd-sep { width: 1px; align-self: stretch; margin: 3px 1px; background: var(--bd-line-2); }
+/* The "no tint" swatch: a hollow dot with a diagonal, next to the presets. */
+.bd-leafbar .bd-swatch-none {
+  background: transparent;
+  border-color: var(--bd-line-2);
+  position: relative;
+}
+.bd-leafbar .bd-swatch-none::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-top: 1px solid var(--bd-dim);
+  transform: rotate(-45deg) translateY(4px);
+}
+.bd-leafbar .bd-swatch-none.is-on { border-color: var(--bd-text); }
+
+/* ── header overlays: chevron (left) and (i) with its hover tip (right) ── */
+.bd-leaf-caret {
+  order: -1; /* before the kind dot the header draws with ::before */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: -0.2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--bd-dim);
+  cursor: pointer;
+  flex: none;
+}
+.bd-leaf-caret:hover { background: var(--bd-line-soft); color: var(--bd-text); }
+.bd-leaf-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: var(--bd-dim);
+  cursor: help;
+  flex: none;
+}
+.bd-leaf-info:hover { background: var(--bd-line-soft); color: var(--bd-text); }
+.bd-leaf-tip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: -4px;
+  width: 220px;
+  padding: 8px 10px;
+  background: var(--bd-glass);
+  border: 1px solid var(--bd-line-2);
+  border-radius: var(--bd-r-sm);
+  color: var(--bd-text-node);
+  font-size: var(--bd-fs-xs);
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--bd-shadow-menu);
+  z-index: 30;
+  pointer-events: none;
+}
+.bd-leaf-info:hover .bd-leaf-tip { display: block; }
+.bd-leaf-tip-kind {
+  font-size: var(--bd-fs-3xs);
+  font-weight: 600;
+  letter-spacing: var(--bd-track-caps);
+  text-transform: uppercase;
+  color: var(--bd-dim);
+  margin-bottom: 4px;
+}
+.bd-leaf-tip-row { display: grid; grid-template-columns: 58px 1fr; gap: 6px; }
+.bd-leaf-tip-row + .bd-leaf-tip-row { margin-top: 2px; }
+.bd-leaf-tip-row > span:first-child {
+  font-size: var(--bd-fs-3xs);
+  letter-spacing: var(--bd-track-caps);
+  text-transform: uppercase;
+  color: var(--bd-dim);
+  padding-top: 2px;
+}
+.bd-leaf-tip-row > span:last-child { overflow-wrap: anywhere; }
+
+/* ── bypass: faded card, magenta stripe (the inline style sets --bd-kind + opacity) ── */
+.bd-node.is-bypassed { border-style: dashed; }
+
+/* ── collapsed to the header: the card IS its title bar, handles converge on its edges ── */
+.bd-node.is-collapsed { padding-bottom: 0; min-width: 190px; }
+.bd-node.is-collapsed .bd-node-title {
+  position: relative; /* the converged handles anchor here, not on the port rows */
+  margin-bottom: 0;
+  border-bottom: none;
+  border-radius: calc(var(--bd-radius) - 1px);
+}
+.bd-node.is-collapsed .react-flow__handle.bd-leaf-hub {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--bd-bg);
+  border-radius: 50%;
+  background: var(--bd-kind);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4);
+}

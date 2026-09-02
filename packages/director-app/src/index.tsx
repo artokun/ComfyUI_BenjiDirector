@@ -15,7 +15,7 @@ import "./styles.css";
 import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 // ── feature modules register panels, slots and drive commands on import; one line per unit ──
 // U1 (stability: nothing to import)
-// U2 import "./node-chrome.jsx";
+import "./node-chrome.jsx";
 // U3 import "./useEditorHotkeys.js"; import "./help.jsx";
 // U4 import "./sidebar.jsx"; import "./persistence.js";
 // U5 import "./container-delete.jsx";
