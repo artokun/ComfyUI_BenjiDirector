@@ -26,7 +26,7 @@ import "./selection-toolbar.jsx"; // U8a
 import "./note-node.jsx"; // U9
 import "./JobStrip.jsx"; // U10
 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
-// U12 import "./Inspector.jsx";
+import "./Inspector.jsx"; // U12
 // U13 (calliope-sync.ts is imported by DirectorApp)
 import "./AssetsPanel.jsx"; // U14
 import "./RenderPanel.jsx"; // U15
