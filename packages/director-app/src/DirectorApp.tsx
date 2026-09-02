@@ -11,6 +11,7 @@
 
 import {
   Background,
+  BackgroundVariant,
   Controls,
   Position,
   ReactFlow,
@@ -2113,7 +2114,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
             <ModalBridge into={modalRef} />
             <div className="bd-toolbar">
               <strong className="bd-brand"><Icon name="clapper" /> Director</strong>
-              <button type="button" onClick={groupSelection} title="Wrap the selection in a new Beat">Group</button>
+              <button type="button" onClick={groupSelection} title="Wrap the selection in a new Beat"><Icon name="box" /> Group</button>
               <button
                 type="button"
                 title="Turn the selected Beat into a subgraph — its crossings become rails"
@@ -2124,7 +2125,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                   return undefined;
                 }}
               >
-                Subgraph
+                <Icon name="layers" /> Subgraph
               </button>
               <button
                 type="button"
@@ -2136,13 +2137,13 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                   return undefined;
                 }}
               >
-                Dissolve
+                <Icon name="split" /> Dissolve
               </button>
-              <button type="button" onClick={deleteSelection}>Delete</button>
+              <button type="button" className="is-danger" onClick={deleteSelection} title="Delete the selection"><Icon name="trash" /> Delete</button>
               <span className="bd-sep" />
-              <button type="button" onClick={undo} title="Ctrl+Z">Undo</button>
-              <button type="button" onClick={redo} title="Ctrl+Shift+Z">Redo</button>
-              <button type="button" onClick={repair} title="Re-derive every boundary from the wires">Repair</button>
+              <button type="button" className="bd-iconbtn" aria-label="Undo" onClick={undo} title="Undo (Ctrl+Z)"><Icon name="undo" /></button>
+              <button type="button" className="bd-iconbtn" aria-label="Redo" onClick={redo} title="Redo (Ctrl+Shift+Z)"><Icon name="redo" /></button>
+              <button type="button" className="bd-iconbtn" aria-label="Repair" onClick={repair} title="Repair — re-derive every boundary from the wires"><Icon name="wrench" /></button>
               <span className="bd-sep" />
               <span className="bd-stat">
                 {beats.length} beat{beats.length === 1 ? "" : "s"} · {promoted} promoted
@@ -2224,7 +2225,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                 fitView
                 proOptions={{ hideAttribution: true }}
               >
-                <Background gap={18} size={1} color="#2a2a35" />
+                <Background variant={BackgroundVariant.Lines} gap={100} lineWidth={1} color="rgba(163,163,163,0.11)" />
                 <Controls showInteractive={false} />
                 <DirectorMiniMap /> {/* [U8a] */}
               </ReactFlow>

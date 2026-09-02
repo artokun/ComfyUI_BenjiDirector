@@ -1,27 +1,48 @@
-/* Director styles.
+/* Director styles — the getplushy look.
    Scoped under .bd-root so nothing here can leak into ComfyUI's own UI when the bundle is
    mounted inside the panel — the pane is a direct-DOM child of the page, not an iframe, so
    a bare `button { }` rule would restyle the whole application.
 
-   Design rules, so the next change fits:
-   - Four surfaces, one step of contrast apart: canvas (bg) < panel < raised < line. Nothing
-     is pure black, nothing is pure white, and colour comes from the port types and the
-     Beat tints, not from the chrome.
-   - One radius scale (10 / 8 / 6 / pill), one shadow, one type scale (13 / 12 / 11 / 10).
-   - A node is a header strip plus rows. A container is a title bar plus a tinted body.
-   - Wires are the loudest thing on screen, on purpose: they are the data. */
+   THE LANGUAGE (measured from getplushy.org, so a new rule can be checked against it):
+   - Graphite, premium-utilitarian. Surfaces #080808 (canvas) < #0a0a0a (app) < #171717 (cards,
+     popovers, docks) < #262626 (node header, muted fills) < #404040 (hover). Node bodies are a
+     shallow gradient (#353535 → #303030). Every border is a WHITE-ALPHA HAIRLINE, never a solid
+     grey; every raised surface carries a 1px inset highlight at 3%.
+   - Colour is for STATE only. Primary buttons are monochrome (#d4d4d4 on #171717). Cyan-400 is
+     focus, the active tab, the accent pill. Blue is "running". Emerald / amber / red are
+     semantics, always as bg/10 + border/30 + text-300. Port and Beat tints are data, not chrome.
+   - One radius scale: 16 (cards, popovers) / 12.8 / 9.6 / 22.4 / 28.8 (modal) / pill.
+   - Type: Geist + Geist Mono, a tiny scale (9 / 10 / 11 / 12 / 13), tabular numerals, and
+     section labels as 10px semibold UPPERCASE tracked .08–.16em.
+   - Motion: 150ms cubic-bezier(.4,0,.2,1) on colour; 100ms on handles; 200ms on drawers;
+     popovers fade + zoom-95 + slide-from-top-2; the running ring pulses at 1.15s.
+   - The playfulness is the round 16px cards, the cyan→violet gradient (progress only) and the
+     wide-tracked micro-caps. Nothing else is decorated.
+
+   Other units add `src/styles/<unit>.css` and use ONLY the `--bd-*` tokens and the component
+   recipes below (.bd-btn, .bd-input, .bd-card, .bd-label, .bd-chip-state, .bd-progress, …). */
 
 .bd-root {
-  /* ── surfaces (graphite: four steps a hairline apart) ── */
+  /* ── surfaces (graphite: five steps a hairline apart) ── */
   --bd-bg: #080808;
   --bd-bg-2: #0a0a0a;
   --bd-panel: #171717;
   --bd-raised: #262626;
+  --bd-header: #262626;
   --bd-hover: #404040;
   --bd-node: linear-gradient(180deg, #353535, #303030);
+  --bd-node-top: #353535;
+  --bd-node-bottom: #303030;
   --bd-glass: rgba(13, 17, 23, 0.96);
+  --bd-bar: rgba(10, 10, 10, 0.92);
   --bd-scrim: rgba(0, 0, 0, 0.8);
   --bd-grid: rgba(163, 163, 163, 0.24);
+  --bd-grid-soft: rgba(163, 163, 163, 0.12);
+  /* ── white-alpha fills (rails, pills, chips, hover) ── */
+  --bd-fill-3: rgba(255, 255, 255, 0.03);
+  --bd-fill-5: rgba(255, 255, 255, 0.05);
+  --bd-fill-8: rgba(255, 255, 255, 0.08);
+  --bd-fill-10: rgba(255, 255, 255, 0.1);
   /* ── lines ── */
   --bd-line: rgba(255, 255, 255, 0.1);
   --bd-line-2: rgba(255, 255, 255, 0.16);
@@ -29,23 +50,43 @@
   --bd-line-input: rgba(255, 255, 255, 0.15);
   --bd-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   --bd-ring: #737373;
+  --bd-ring-accent: rgba(34, 211, 238, 0.6);
   /* ── text ── */
   --bd-text: #fafafa;
   --bd-text-node: #dddddd;
+  --bd-title-node: #999999;
   --bd-dim: #a3a3a3;
   --bd-dim-2: #999999;
   --bd-faint: #64748b;
   /* ── colour only for state ── */
   --bd-primary: #d4d4d4;
+  --bd-primary-hover: #e5e5e5;
   --bd-primary-fg: #171717;
   --bd-accent: #22d3ee;
   --bd-accent-2: #60a5fa;
   --bd-accent-3: #a78bfa;
+  --bd-accent-fg: #a5f3fc;
+  --bd-accent-10: rgba(34, 211, 238, 0.1);
+  --bd-accent-30: rgba(34, 211, 238, 0.3);
   --bd-grad: linear-gradient(90deg, #22d3ee, #38bdf8, #a78bfa);
+  --bd-run: #3b82f6;
+  --bd-run-2: #60a5fa;
   --bd-pin: #facc15;
   --bd-ok: #34d399;
+  --bd-ok-fg: #6ee7b7;
+  --bd-ok-10: rgba(16, 185, 129, 0.1);
+  --bd-ok-30: rgba(16, 185, 129, 0.3);
   --bd-warn: #fbbf24;
+  --bd-warn-fg: #fde68a;
+  --bd-warn-10: rgba(245, 158, 11, 0.1);
+  --bd-warn-30: rgba(245, 158, 11, 0.3);
   --bd-bad: #f87171;
+  --bd-bad-fg: #fca5a5;
+  --bd-bad-10: rgba(239, 68, 68, 0.1);
+  --bd-bad-30: rgba(239, 68, 68, 0.3);
+  --bd-info-fg: #bfdbfe;
+  --bd-info-10: rgba(96, 165, 250, 0.1);
+  --bd-info-30: rgba(96, 165, 250, 0.3);
   --bd-neutral: #6b7280;
   --bd-bypass: #ff00ff;
   /* ── shape ── */
@@ -65,8 +106,10 @@
   --bd-shadow-float: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
   --bd-shadow-rail: 2px 0 12px rgba(0, 0, 0, 0.18);
   --bd-glow-run: 0 0 0 1px #60a5fa, 0 0 18px rgba(59, 130, 246, 0.35), 0 0 28px rgba(34, 211, 238, 0.24);
+  --bd-blur: blur(24px);
+  --bd-blur-bar: blur(8px);
   /* ── type ── */
-  --bd-font: "Geist", "Geist Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  --bd-font: "Geist", "Geist Sans", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --bd-font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --bd-fs-3xs: 9px;
   --bd-fs-2xs: 10px;
@@ -81,6 +124,29 @@
   --bd-dur: 150ms;
   --bd-dur-fast: 100ms;
   --bd-dur-slow: 200ms;
+  /* ── React Flow chrome reads these (its own vars, our values) ── */
+  --xy-edge-stroke: #737373;
+  --xy-edge-stroke-selected: #fafafa;
+  --xy-edge-stroke-width: 1.8;
+  --xy-connectionline-stroke: #a3a3a3;
+  --xy-handle-background-color: #737373;
+  --xy-handle-border-color: #171717;
+  --xy-selection-background-color: rgba(34, 211, 238, 0.06);
+  --xy-selection-border: 1px solid rgba(34, 211, 238, 0.4);
+  --xy-resize-background-color: #fafafa;
+  --xy-minimap-background-color: transparent;
+  --xy-minimap-mask-background-color: rgba(8, 8, 8, 0.6);
+  --xy-minimap-mask-stroke-color: rgba(255, 255, 255, 0.12);
+  --xy-minimap-mask-stroke-width: 1;
+  --xy-minimap-node-background-color: #404040;
+  --xy-minimap-node-stroke-color: transparent;
+  --xy-controls-button-background-color: transparent;
+  --xy-controls-button-background-color-hover: #262626;
+  --xy-controls-button-color: #a3a3a3;
+  --xy-controls-button-color-hover: #fafafa;
+  --xy-controls-button-border-color: rgba(255, 255, 255, 0.1);
+  --xy-controls-box-shadow: none;
+
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -88,167 +154,497 @@
   min-height: 420px;
   background: var(--bd-bg-2);
   color: var(--bd-text);
-  font: 12.5px/1.4 var(--bd-font);
+  font: 12px/1.4 var(--bd-font);
   font-feature-settings: "tnum" 1, "cv11" 1;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  box-sizing: border-box;
+}
+.bd-root *,
+.bd-root *::before,
+.bd-root *::after { box-sizing: border-box; }
+/* React Flow measures ITS OWN chrome in content-box — a resize strip is `width: 1px` PLUS a
+   1px border, i.e. a 2px drag target — and a border-box reset silently halves it. Hand RF's
+   internals back; handles keep border-box, where we set the whole footprint ourselves. */
+.bd-root [class*="react-flow__"] { box-sizing: content-box; }
+.bd-root .react-flow__handle { box-sizing: border-box; }
+.bd-root * { scrollbar-width: thin; scrollbar-color: #404040 transparent; }
+.bd-root *::-webkit-scrollbar { width: 8px; height: 8px; }
+.bd-root *::-webkit-scrollbar-thumb { background: #404040; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+.bd-root *::-webkit-scrollbar-track { background: transparent; }
+
+/* Focus: a 1px neutral ring on controls, cyan on anything you type into. Never the browser's. */
+.bd-root button:focus-visible,
+.bd-root [role="button"]:focus-visible,
+.bd-root [tabindex]:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--bd-ring); }
+.bd-root input:focus-visible,
+.bd-root textarea:focus-visible,
+.bd-root select:focus-visible { outline: none; }
+
+/* ── shared recipes: buttons, inputs, labels, cards, chips ─────────────────── */
+
+/* Buttons are monochrome. Default = outline (hairline on a 4% fill); primary = light on dark. */
+.bd-btn,
+.bd-toolbar > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--bd-r-md);
+  border: 1px solid var(--bd-line-soft);
+  background: var(--bd-fill-3);
+  color: var(--bd-primary);
+  font: 500 var(--bd-fs-sm)/1 var(--bd-font);
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--bd-hairline);
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease), transform 60ms var(--bd-ease);
+}
+.bd-btn:hover,
+.bd-toolbar > button:hover { background: var(--bd-raised); color: var(--bd-text); border-color: var(--bd-line); }
+.bd-btn:active,
+.bd-toolbar > button:active { transform: translateY(1px); }
+.bd-btn:disabled,
+.bd-toolbar > button:disabled { opacity: 0.45; cursor: default; transform: none; }
+.bd-btn.is-primary { background: var(--bd-primary); color: var(--bd-primary-fg); border-color: transparent; box-shadow: none; }
+.bd-btn.is-primary:hover { background: var(--bd-primary-hover); color: var(--bd-primary-fg); border-color: transparent; }
+.bd-btn.is-accent { background: var(--bd-accent-10); border-color: var(--bd-accent-30); color: var(--bd-accent-fg); }
+.bd-btn.is-accent:hover { background: rgba(34, 211, 238, 0.16); color: #cffafe; border-color: rgba(34, 211, 238, 0.45); }
+.bd-btn.is-danger { color: var(--bd-bad-fg); border-color: var(--bd-bad-30); background: var(--bd-bad-10); }
+.bd-btn.is-danger:hover { background: rgba(239, 68, 68, 0.18); color: #fecaca; border-color: rgba(239, 68, 68, 0.45); }
+.bd-btn.is-ok { color: var(--bd-ok-fg); border-color: var(--bd-ok-30); background: var(--bd-ok-10); }
+.bd-btn.is-ok:hover { background: rgba(16, 185, 129, 0.18); color: #a7f3d0; }
+.bd-btn.is-ghost { background: transparent; border-color: transparent; color: var(--bd-dim); box-shadow: none; }
+.bd-btn.is-ghost:hover { background: var(--bd-raised); color: var(--bd-text); border-color: transparent; }
+.bd-btn.is-icon,
+.bd-iconbtn { width: 28px; padding: 0; border-radius: var(--bd-r-lg); }
+.bd-btn.is-sm { height: 24px; padding: 0 8px; font-size: var(--bd-fs-xs); border-radius: var(--bd-r-sm); }
+.bd-btn.is-sm.is-icon { width: 24px; }
+.bd-btn.is-on { background: var(--bd-accent-10); border-color: var(--bd-accent-30); color: var(--bd-accent-fg); }
+/* An icon-only button: ghost, square, rounded-lg, muted → secondary fill on hover. */
+.bd-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--bd-dim);
+  cursor: pointer;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease);
+}
+.bd-iconbtn:hover { background: var(--bd-raised); color: var(--bd-text); }
+.bd-iconbtn.is-on { background: var(--bd-accent-10); border-color: var(--bd-accent-30); color: var(--bd-accent-fg); }
+
+/* Inputs: dark well, 15% hairline, cyan ring when focused. */
+.bd-input {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--bd-r-sm);
+  border: 1px solid var(--bd-line-input);
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: var(--bd-hairline);
+  color: var(--bd-text);
+  font: 500 var(--bd-fs-xs)/1.3 var(--bd-font);
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  width: 100%;
+  transition: border-color var(--bd-dur) var(--bd-ease), box-shadow var(--bd-dur) var(--bd-ease), background-color var(--bd-dur) var(--bd-ease);
+}
+textarea.bd-input { height: auto; padding: 6px 8px; resize: vertical; line-height: 1.4; min-height: 56px; }
+.bd-input::placeholder { color: var(--bd-dim-2); }
+.bd-input:hover { border-color: rgba(255, 255, 255, 0.2); }
+.bd-input:focus { border-color: var(--bd-ring-accent); background: rgba(0, 0, 0, 0.4); box-shadow: 0 0 0 1px var(--bd-ring-accent), var(--bd-hairline); }
+.bd-input.form { height: 36px; padding: 0 12px; border-radius: var(--bd-r-md); border-color: var(--bd-line-input); background: var(--bd-panel); font-size: var(--bd-fs-md); }
+.bd-input.is-mono { font-family: var(--bd-font-mono); }
+select.bd-input,
+.bd-select,
+.bd-project {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 28px;
+  padding: 0 24px 0 8px;
+  border-radius: var(--bd-r-sm);
+  border: 1px solid var(--bd-line-input);
+  background: rgba(0, 0, 0, 0.35) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>") no-repeat right 7px center / 12px 12px;
+  box-shadow: var(--bd-hairline);
+  color: var(--bd-text);
+  font: 500 var(--bd-fs-sm)/1 var(--bd-font);
+  max-width: 220px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--bd-dur) var(--bd-ease), box-shadow var(--bd-dur) var(--bd-ease);
+}
+select.bd-input:hover, .bd-select:hover, .bd-project:hover { border-color: rgba(255, 255, 255, 0.2); }
+select.bd-input:focus, .bd-select:focus, .bd-project:focus { border-color: var(--bd-ring-accent); box-shadow: 0 0 0 1px var(--bd-ring-accent); }
+select.bd-input option, .bd-select option, .bd-project option { background: var(--bd-panel); color: var(--bd-text); }
+
+/* Section label: the 10px semibold tracked micro-caps that head every group of controls. */
+.bd-label,
+.bd-dyn-label,
+.bd-menu-head,
+.bd-palette-head,
+.bd-palette-group {
+  font-size: var(--bd-fs-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps);
+  color: var(--bd-dim);
+  line-height: 1.2;
+}
+.bd-label.is-wide { letter-spacing: var(--bd-track-caps-wide); }
+.bd-mono { font-family: var(--bd-font-mono); font-variant-numeric: tabular-nums; }
+.bd-muted { color: var(--bd-dim); }
+.bd-faint { color: var(--bd-faint); }
+
+/* A card: the #171717 surface with a hairline and the inset highlight. Sidebars, inspector rows. */
+.bd-card {
+  background: var(--bd-panel);
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-lg);
+  box-shadow: var(--bd-hairline);
+  padding: 12px;
+}
+.bd-card.is-tight { padding: 8px; border-radius: var(--bd-r-md); }
+.bd-card-title { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: var(--bd-fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: var(--bd-track-caps); color: var(--bd-dim); }
+.bd-divider { height: 1px; background: var(--bd-line); margin: 8px 0; border: none; }
+.bd-empty { color: var(--bd-dim); font-size: var(--bd-fs-xs); text-align: center; padding: 16px 8px; }
+.bd-kbd {
+  display: inline-block;
+  padding: 0 5px;
+  min-width: 18px;
+  height: 18px;
+  line-height: 16px;
+  border-radius: 5px;
+  border: 1px solid var(--bd-line);
+  border-bottom-width: 2px;
+  background: var(--bd-fill-5);
+  color: var(--bd-dim);
+  font: 500 var(--bd-fs-2xs)/16px var(--bd-font-mono);
+  text-align: center;
+}
+/* The one gradient: progress. Track white/8, bar cyan → violet. */
+.bd-progress { position: relative; height: 4px; border-radius: var(--bd-r-pill); background: var(--bd-fill-8); overflow: hidden; }
+.bd-progress > i,
+.bd-progress-bar,
+.bd-progress-fill { display: block; height: 100%; border-radius: inherit; background: var(--bd-grad); transition: width var(--bd-dur-slow) var(--bd-ease); }
+.bd-progress.is-indeterminate > i,
+.bd-progress.is-indeterminate .bd-progress-bar { width: 40%; animation: bd-progress-slide 1.15s var(--bd-ease) infinite; }
+@keyframes bd-progress-slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+
+/* State chip: dot + micro text, tinted by state. `.bd-chip-state.ok|warn|err|info|run`. */
+.bd-chip-state,
+.bd-status,
+.bd-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: var(--bd-r-pill);
+  border: 1px solid var(--bd-line-soft);
+  background: var(--bd-fill-5);
+  font-size: var(--bd-fs-2xs);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--bd-dim);
+  white-space: nowrap;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
+}
+.bd-chip-state::before,
+.bd-status::before,
+.bd-sync::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--chip-color, currentColor); flex: none; }
+.bd-chip-state.ok, .bd-status.is-up, .bd-sync.is-saved { --chip-color: var(--bd-ok); border-color: var(--bd-ok-30); background: var(--bd-ok-10); color: var(--bd-ok-fg); }
+.bd-chip-state.warn, .bd-sync.is-saving { --chip-color: var(--bd-warn); border-color: var(--bd-warn-30); background: var(--bd-warn-10); color: var(--bd-warn-fg); }
+.bd-chip-state.err, .bd-status.is-down, .bd-sync.is-error { --chip-color: var(--bd-bad); border-color: var(--bd-bad-30); background: var(--bd-bad-10); color: var(--bd-bad-fg); }
+.bd-chip-state.info { --chip-color: var(--bd-accent-2); border-color: var(--bd-info-30); background: var(--bd-info-10); color: var(--bd-info-fg); }
+.bd-chip-state.run { --chip-color: var(--bd-run-2); border-color: var(--bd-info-30); background: var(--bd-info-10); color: var(--bd-info-fg); }
+.bd-chip-state.run::before, .bd-sync.is-saving::before { animation: bd-pulse-text 1.15s ease-in-out infinite; }
+.bd-chip-state.accent { --chip-color: var(--bd-accent); border-color: var(--bd-accent-30); background: var(--bd-accent-10); color: var(--bd-accent-fg); }
+.bd-status { max-width: 320px; overflow: hidden; }
+.bd-status.is-up { text-transform: none; }
+
+/* The plain chip: numbers and tags (a scene's duration). Mono, tabular. */
+.bd-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 6px;
+  border-radius: var(--bd-r-pill);
+  border: 1px solid var(--bd-line);
+  background: var(--bd-fill-5);
+  color: var(--bd-dim);
+  font: 500 var(--bd-fs-2xs)/1 var(--bd-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+  flex: none;
 }
 
-/* ── toolbar ────────────────────────────────────────────────────────────────── */
+/* Render-status badge on a node. Pill, micro-caps, semantic tint; "rendering" breathes. */
+.bd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 16px;
+  padding: 1px 6px;
+  margin: 6px 10px 0;
+  border-radius: var(--bd-r-pill);
+  border: 1px solid var(--bd-ok-30);
+  background: var(--bd-ok-10);
+  color: var(--bd-ok-fg);
+  font-size: var(--bd-fs-3xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps);
+  line-height: 1;
+}
+.bd-badge.is-queued { color: var(--bd-info-fg); background: var(--bd-info-10); border-color: var(--bd-info-30); }
+.bd-badge.is-rendering { color: var(--bd-accent-fg); background: var(--bd-accent-10); border-color: var(--bd-accent-30); animation: bd-pulse-text 1.15s ease-in-out infinite; }
+.bd-badge.is-failed { color: var(--bd-bad-fg); background: var(--bd-bad-10); border-color: var(--bd-bad-30); }
+@keyframes bd-pulse-text { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+/* ── toolbar: a 40px glass bar ───────────────────────────────────────────── */
 
 .bd-toolbar {
+  position: relative;
+  z-index: 30;
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 4px;
   min-height: 40px;
-  padding: 0.35rem 0.6rem;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--bd-line);
-  background: var(--bd-panel);
+  background: var(--bd-bar);
+  backdrop-filter: var(--bd-blur-bar);
+  -webkit-backdrop-filter: var(--bd-blur-bar);
+  box-shadow: var(--bd-hairline);
   flex-wrap: wrap;
 }
 .bd-brand {
-  color: var(--bd-accent-2);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  font-size: 11px;
-  text-transform: uppercase;
-  margin-right: 0.35rem;
-}
-.bd-toolbar button {
-  background: var(--bd-raised);
-  color: var(--bd-text);
-  border: 1px solid var(--bd-line);
-  border-radius: var(--bd-radius-sm);
-  padding: 0.28rem 0.6rem;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 0.12s, background 0.12s, transform 0.06s;
-}
-.bd-toolbar button:hover { background: #2a2a37; border-color: var(--bd-line-2); }
-.bd-toolbar button:active { transform: translateY(1px); }
-.bd-toolbar button:disabled { opacity: 0.45; cursor: default; transform: none; }
-.bd-sep { width: 1px; height: 18px; background: var(--bd-line-2); margin: 0 0.3rem; }
-.bd-spacer { flex: 1; }
-.bd-stat { color: var(--bd-dim); font-size: 11.5px; }
-.bd-status {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 0.18rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid var(--bd-line);
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 6px;
+  margin-right: 6px;
+  padding-right: 10px;
+  border-right: 1px solid var(--bd-line);
+  color: var(--bd-text);
+  font-size: var(--bd-fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--bd-track-caps-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
 }
-.bd-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.bd-status.is-up { color: var(--bd-ok); border-color: #1f4d2e; background: #0f2419; }
-.bd-status.is-down { color: var(--bd-bad); border-color: #5a2222; background: #2a1414; }
+.bd-brand .bd-icon { color: var(--bd-accent); }
+/* Inside the bar, an icon-only button is ghost — the outline recipe would make a row of boxes. */
+.bd-toolbar > .bd-iconbtn { width: 28px; height: 28px; padding: 0; background: transparent; border-color: transparent; box-shadow: none; color: var(--bd-dim); }
+.bd-toolbar > .bd-iconbtn:hover { background: var(--bd-raised); color: var(--bd-text); border-color: transparent; }
+.bd-toolbar > button .bd-icon { color: var(--bd-dim-2); transition: color var(--bd-dur) var(--bd-ease); }
+.bd-toolbar > button:hover .bd-icon { color: var(--bd-text); }
+.bd-toolbar > button.is-danger { color: var(--bd-bad-fg); border-color: var(--bd-bad-30); background: var(--bd-bad-10); }
+.bd-toolbar > button.is-danger:hover { background: rgba(239, 68, 68, 0.18); color: #fecaca; border-color: rgba(239, 68, 68, 0.45); }
+.bd-toolbar > button.is-danger .bd-icon, .bd-toolbar > button.is-danger:hover .bd-icon { color: currentColor; }
 
+.bd-sep { width: 1px; height: 16px; background: var(--bd-line); margin: 0 4px; flex: none; }
+.bd-spacer { flex: 1; }
+.bd-stat { color: var(--bd-dim); font-size: var(--bd-fs-xs); font-variant-numeric: tabular-nums; padding: 0 4px; white-space: nowrap; }
+
+/* The note bar under the toolbar: a status line, cyan-keyed on the left. */
 .bd-note {
-  padding: 0.3rem 0.7rem;
-  background: var(--bd-panel);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 12px;
+  background: rgba(23, 23, 23, 0.9);
   border-bottom: 1px solid var(--bd-line);
-  border-left: 3px solid var(--bd-accent);
+  box-shadow: inset 2px 0 0 var(--bd-accent);
   color: var(--bd-dim);
-  font-size: 11.5px;
+  font-size: var(--bd-fs-xs);
 }
+.bd-note::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--bd-accent); flex: none; opacity: 0.9; }
 
-.bd-canvas { flex: 1; min-height: 0; position: relative; }
+/* ── tabs, docks, body ─────────────────────────────────────────────────────── */
+
+.bd-body { flex: 1; min-height: 0; display: flex; }
+.bd-dock { display: flex; flex-direction: column; min-height: 0; overflow: auto; background: var(--bd-bg-2); }
+.bd-dock:empty { display: none; }
+.bd-dock-left { border-right: 1px solid var(--bd-line); }
+.bd-dock-right { border-left: 1px solid var(--bd-line); }
+.bd-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px;
+  background: var(--bd-bar);
+  backdrop-filter: var(--bd-blur-bar);
+  -webkit-backdrop-filter: var(--bd-blur-bar);
+  border-bottom: 1px solid var(--bd-line);
+  overflow-x: auto;
+}
+.bd-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--bd-dim);
+  font: 500 var(--bd-fs-xs)/1 var(--bd-font);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
+}
+.bd-tab:hover { background: var(--bd-fill-3); color: #e5e5e5; }
+.bd-tab.is-active { color: var(--bd-text); border-bottom-color: var(--bd-accent); }
+.bd-tab .bd-icon { color: var(--bd-dim-2); }
+.bd-tab.is-active .bd-icon { color: var(--bd-accent); }
+.bd-tab-badge {
+  margin-left: 2px;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: var(--bd-r-pill);
+  background: var(--bd-accent-10);
+  border: 1px solid var(--bd-accent-30);
+  color: var(--bd-accent-fg);
+  font: 600 var(--bd-fs-3xs)/14px var(--bd-font-mono);
+}
+.bd-panel-host { position: absolute; inset: 0; z-index: 20; overflow: auto; background: var(--bd-bg-2); padding: 12px; }
+
+.bd-canvas { flex: 1; min-height: 0; position: relative; background: var(--bd-bg); }
 
 /* ── nodes ─────────────────────────────────────────────────────────────────── */
 
+/* A node is a 16px card: hairline border, shallow gradient body, a #262626 header keyed by the
+   kind colour (gradient from the left + a 2px underline). `--bd-kind` is the kind colour; a
+   per-node tint set by the renderer overrides it on the element. */
 .bd-node {
   --bd-kind: var(--bd-accent);
-  background: var(--bd-panel);
-  border: 1px solid var(--bd-line);
+  position: relative;
+  background: var(--bd-node);
+  border: 1px solid var(--bd-line-soft);
   border-radius: var(--bd-radius);
-  padding: 0 0.55rem 0.4rem;
+  padding: 0 0 4px;
   min-width: 210px;
-  box-shadow: var(--bd-shadow);
-  transition: border-color 0.12s, box-shadow 0.12s;
+  color: var(--bd-text-node);
+  box-shadow: var(--bd-shadow-node), var(--bd-hairline);
+  transition: border-color var(--bd-dur) var(--bd-ease), box-shadow var(--bd-dur) var(--bd-ease);
 }
-.bd-node:hover { border-color: var(--bd-line-2); }
-.bd-node.is-selected,
-.bd-collapsed.is-selected { border-color: var(--bd-accent); box-shadow: 0 0 0 1px var(--bd-accent), var(--bd-shadow); }
+.bd-node:hover { border-color: var(--bd-line); }
+.bd-node.is-selected { outline: 1px solid #fff; outline-offset: -1px; border-color: transparent; }
+.bd-collapsed.is-selected { outline: 1px solid var(--bd-kind, #fff); outline-offset: -1px; border-color: transparent; }
+.bd-node.is-selected .bd-node-title,
+.bd-collapsed.is-selected .bd-collapsed-title { color: #fff; }
 .bd-scene { --bd-kind: #3b82f6; }
 .bd-asset { --bd-kind: #f59e0b; min-width: 160px; }
 
-/* The header strip: kind-tinted, edge to edge, rounded with the card. */
+/* The header strip: 34px, #262626 with the kind colour bleeding in from the left, and a 2px
+   underline in that colour. Title reads muted until the node is selected. */
 .bd-node-title {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  margin: 0 -0.55rem 0.3rem;
-  padding: 0.38rem 0.6rem;
-  background: color-mix(in srgb, var(--bd-kind) 16%, var(--bd-panel));
-  border-bottom: 1px solid color-mix(in srgb, var(--bd-kind) 28%, var(--bd-line));
+  gap: 6px;
+  height: 34px;
+  padding: 0 8px 0 10px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bd-kind) 25%, transparent), var(--bd-header) 70%);
+  border-bottom: 2px solid var(--bd-kind);
   border-radius: calc(var(--bd-radius) - 1px) calc(var(--bd-radius) - 1px) 0 0;
-  font-size: 12.5px;
+  color: var(--bd-title-node);
+  font-size: var(--bd-fs-sm);
   font-weight: 600;
   letter-spacing: 0.005em;
+  transition: color var(--bd-dur) var(--bd-ease);
 }
-.bd-node-title::before {
+.bd-node-title .bd-icon { color: var(--bd-kind); }
+.bd-node-title > span.bd-icon { display: inline-flex; }
+.bd-node-title .bd-chip { margin-left: auto; }
+.bd-title-grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-node.is-collapsed { padding-bottom: 0; }
+.bd-node.is-collapsed .bd-node-title { border-bottom-width: 0; border-radius: calc(var(--bd-radius) - 1px); }
+
+/* Bypassed: faded, magenta-keyed header. Hover brings it back enough to read. */
+/* Bypassed: magenta-keyed and faded. U2's leaf renderer sets the exact opacity inline. */
+.bd-node.is-bypassed { --bd-kind: var(--bd-bypass); opacity: 0.35; }
+
+/* Rendering: a blue ring that breathes at 1.15s around the card. */
+.bd-node.is-rendering { border-color: rgba(96, 165, 250, 0.5); }
+.bd-node.is-rendering::after {
   content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 2px;
-  background: var(--bd-kind);
-  flex: none;
+  position: absolute;
+  inset: -3px;
+  border-radius: calc(var(--bd-radius) + 3px);
+  border: 1.5px solid var(--bd-run-2);
+  pointer-events: none;
+  animation: bd-pulse-ring 1.15s ease-in-out infinite;
 }
-.bd-icon { font-size: 13px; }
-.bd-badge {
-  display: inline-block;
-  font-size: 9.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--bd-ok);
-  background: #123322;
-  border: 1px solid #1f4d2e;
-  border-radius: 4px;
-  padding: 0 0.3rem;
-  margin: 0.15rem 0 0.25rem;
+@keyframes bd-pulse-ring {
+  0%, 100% { opacity: 0.35; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.35); }
+  50% { opacity: 1; box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); }
 }
 
-/* Port rows stack, and each spans the FULL node width via negative margins that cancel the
-   card padding. That is what puts a React Flow handle on the node's edge: the handle is
-   absolutely positioned against this row, so the row's box has to be the node's box. Setting
-   `top` on the handle instead is what made edges terminate off the card. */
-.bd-ports { display: flex; flex-direction: column; gap: 0; margin-top: 0.1rem; }
+/* Port rows stack, and each spans the FULL node width. That is what puts a React Flow handle on
+   the node's edge: the handle is absolutely positioned against this row, so the row's box has
+   to be the node's box. Setting `top` on the handle instead is what made edges terminate off
+   the card. Labels are 10px tracked micro-caps; the handle is an 8px dot in the slot colour. */
+.bd-ports { display: flex; flex-direction: column; gap: 0; padding-top: 2px; }
 .bd-port {
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 19px;
-  margin: 0 -0.55rem;
-  padding: 0 0.7rem;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
+  min-height: 16px;
+  padding: 0 12px;
+  font-size: var(--bd-fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--bd-track-caps);
   text-transform: uppercase;
   color: var(--bd-dim);
   white-space: nowrap;
+  transition: color var(--bd-dur) var(--bd-ease);
 }
 .bd-port:hover { color: var(--bd-text); }
 .bd-port-out { justify-content: flex-end; }
 
-/* ── containers ────────────────────────────────────────────────────────────── */
+/* Handle size and border belong to the design system; the renderer's inline style carries the
+   slot COLOUR only, which is why these are !important — inline wins otherwise. The relay
+   handles (`.bd-empty-hit`, `.bd-hub-inner`) keep their own geometry. */
+.bd-node .react-flow__handle,
+.bd-pill:not(.bd-pill-empty) > .react-flow__handle {
+  width: 8px !important;
+  height: 8px !important;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid rgba(0, 0, 0, 0.45) !important;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.bd-root .react-flow__handle { transition: transform var(--bd-dur-fast) var(--bd-ease), filter var(--bd-dur-fast) var(--bd-ease); }
+.bd-root .react-flow__handle.react-flow__handle-left:hover { transform: translate(-50%, -50%) scale(1.25); filter: brightness(1.1); }
+.bd-root .react-flow__handle.react-flow__handle-right:hover { transform: translate(50%, -50%) scale(1.25); filter: brightness(1.1); }
+.bd-root .react-flow__handle.connectingto { filter: brightness(1.2); }
+.bd-root .react-flow__handle.valid { box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.5); }
 
+/* ── containers (Beats) ────────────────────────────────────────────────────── */
+
+/* A Beat is a tinted 16px box: the tint comes inline (border + a 4–8% wash); the chrome is
+   neutral. A group is dashed, a subgraph solid. */
 .bd-group {
   position: relative;
-  background: rgb(167 139 250 / 0.05);
+  background: var(--bd-fill-3);
   border: 1px dashed var(--bd-line-2);
-  border-radius: 12px;
-  transition: box-shadow 0.12s;
+  border-radius: var(--bd-radius);
+  transition: box-shadow var(--bd-dur) var(--bd-ease);
 }
-.bd-subgraph {
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--bd-accent) 55%, var(--bd-line-2));
-  background: rgb(167 139 250 / 0.08);
-}
-/* The title bar sits INSIDE the box along its top edge, like a window chrome. Its own colour
-   comes from the Beat's tint through the box's inline border colour. */
+.bd-subgraph { border-style: solid; }
+/* The title bar sits INSIDE the box along its top edge: tracked micro-caps on #171717/90 with a
+   hairline under it. It is the drag handle — the body is transparent to the pointer. */
 .bd-group-title {
   position: absolute;
   top: 0;
@@ -257,19 +653,36 @@
   transform: none;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.32rem 0.65rem;
-  background: color-mix(in srgb, var(--bd-panel) 82%, var(--bd-accent));
-  border-bottom: 1px solid color-mix(in srgb, var(--bd-accent) 35%, var(--bd-line));
-  border-radius: 11px 11px 0 0;
-  font-size: 12.5px;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  background: rgba(23, 23, 23, 0.9);
+  backdrop-filter: var(--bd-blur-bar);
+  -webkit-backdrop-filter: var(--bd-blur-bar);
+  border-bottom: 1px solid var(--bd-line);
+  border-radius: calc(var(--bd-radius) - 1px) calc(var(--bd-radius) - 1px) 0 0;
+  box-shadow: var(--bd-hairline);
+  color: var(--bd-text);
+  font-size: var(--bd-fs-2xs);
   font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
+  cursor: grab;
 }
-.bd-subgraph > .bd-group-title { background: color-mix(in srgb, var(--bd-panel) 72%, var(--bd-accent)); }
-.bd-hint { font-weight: 400; font-size: 10.5px; color: var(--bd-dim); letter-spacing: 0.01em; }
+.bd-group-title .bd-icon { color: var(--bd-dim); }
+.bd-hint {
+  font-weight: 400;
+  font-size: var(--bd-fs-2xs);
+  color: var(--bd-dim);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
 .bd-group-title .bd-hint { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+.bd-group.is-selected,
+.bd-subgraph.is-selected { outline: 1px solid #fff; outline-offset: -1px; box-shadow: 0 0 0 4px var(--bd-fill-3); }
 
 /* A rail STRADDLES the container edge, vertically centred — half the pill outside, half in.
    That is what makes the outer handle read as facing the world and the inner one as facing the
@@ -286,16 +699,19 @@
 .bd-rail-in { left: 0; }
 .bd-rail-out { left: 100%; }
 
+/* A pill: 24px, round, the container tint at 12% with a 35% border (the accent recipe with the
+   Beat's colour in place of cyan). Fill, border and text colour come inline from the renderer. */
 .bd-pill {
   position: relative;
-  background: var(--bd-raised);
-  border: 1px solid color-mix(in srgb, var(--bd-accent) 60%, var(--bd-line-2));
-  border-radius: 999px;
-  padding: 0 0.7rem;
-  font-size: 10.5px;
+  background: var(--bd-fill-5);
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-pill);
+  padding: 0 10px;
+  font-size: var(--bd-fs-2xs);
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--bd-track-caps);
   text-transform: uppercase;
+  color: var(--bd-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -303,30 +719,39 @@
   max-width: 220px;
   cursor: grab;
   user-select: none;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
-  transition: filter 0.12s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), var(--bd-hairline);
+  backdrop-filter: var(--bd-blur-bar);
+  -webkit-backdrop-filter: var(--bd-blur-bar);
+  transition: filter var(--bd-dur) var(--bd-ease), background-color var(--bd-dur) var(--bd-ease);
   /* The host page is border-box (Tailwind preflight); the rail's shared width is a CONTENT
      width, so say so, or the padding eats the label and it clips. */
   box-sizing: content-box;
 }
-.bd-pill:hover { filter: brightness(1.18); }
-.bd-pill.is-drag-over { outline: 1px dashed var(--bd-accent-2); outline-offset: 2px; }
-.bd-pill-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-pill:hover { filter: brightness(1.2); }
+.bd-pill.is-drag-over { outline: 1px dashed var(--bd-accent); outline-offset: 2px; }
+.bd-pill-label { display: inline-flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bd-pill.is-pinned { border-style: dashed; }
-.bd-pill.is-pinned .bd-pill-label::after { content: " 📌"; font-size: 9px; }
+.bd-pill.is-pinned .bd-pill-label::after {
+  content: "";
+  flex: none;
+  width: 9px;
+  height: 9px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 17v5M9 3h6l-1 7 3 3H7l3-3z'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 17v5M9 3h6l-1 7 3 3H7l3-3z'/></svg>") center / contain no-repeat;
+}
 
 .bd-pill-input {
   width: 100%;
-  background: var(--bd-bg);
+  background: rgba(0, 0, 0, 0.5);
   color: var(--bd-text);
-  border: 1px solid var(--bd-accent);
-  border-radius: 999px;
-  font: inherit;
-  font-size: 11px;
+  border: 1px solid var(--bd-ring-accent);
+  border-radius: var(--bd-r-pill);
+  font: 500 var(--bd-fs-xs)/1 var(--bd-font);
   text-transform: none;
   letter-spacing: 0;
   text-align: center;
-  padding: 0 0.3rem;
+  padding: 0 6px;
   outline: none;
 }
 
@@ -334,54 +759,69 @@
 .bd-pill-empty {
   border-style: dashed;
   border-color: var(--bd-line-2);
-  background: rgb(167 139 250 / 0.05);
+  background: var(--bd-fill-3);
   color: var(--bd-faint);
   cursor: copy;
   box-shadow: none;
 }
-.bd-pill-empty:hover { border-color: var(--bd-accent); color: var(--bd-accent-2); background: rgb(167 139 250 / 0.12); filter: none; }
-.bd-pill-plus { font-weight: 700; font-size: 12px; }
+.bd-pill-empty:hover { border-color: var(--bd-accent); color: var(--bd-accent-fg); background: var(--bd-accent-10); filter: none; }
+.bd-pill-plus { font-weight: 600; font-size: var(--bd-fs-sm); }
 
+/* The collapse caret in a title: a ghost icon button. */
 .bd-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-left: -4px;
   background: none;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
   color: var(--bd-dim);
   cursor: pointer;
-  font-size: 9px;
-  padding: 0 0.15rem;
   line-height: 1;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease);
 }
-.bd-caret:hover { color: var(--bd-text); }
+.bd-caret:hover { color: var(--bd-text); background: var(--bd-fill-8); }
 
-/* ── collapsed Beat: a hub-and-widgets card, or a pill ─────────────────────── */
+/* ── collapsed Beat: a composed node — hub, header, pinned faces ─────────────── */
 
 .bd-collapsed {
-  background: var(--bd-panel);
-  border: 1px solid var(--bd-accent);
-  border-radius: var(--bd-radius);
-  padding: 0 0.6rem 0.45rem;
-  min-width: 240px;
+  --bd-kind: var(--bd-accent-3);
   position: relative;
-  box-shadow: var(--bd-shadow);
+  background: var(--bd-node);
+  border: 1px solid var(--bd-line-soft);
+  border-radius: var(--bd-radius);
+  padding: 0 0 8px;
+  min-width: 240px;
+  color: var(--bd-text-node);
+  box-shadow: var(--bd-shadow-node), var(--bd-hairline);
+  transition: border-color var(--bd-dur) var(--bd-ease), box-shadow var(--bd-dur) var(--bd-ease);
 }
+.bd-collapsed:hover { border-color: var(--bd-line); }
 .bd-collapsed.is-pill { padding: 0; min-width: 200px; }
 .bd-collapsed-head {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  margin: 0 -0.6rem;
-  padding: 0.38rem 0.7rem;
-  background: color-mix(in srgb, var(--bd-panel) 72%, var(--bd-accent));
-  border-bottom: 1px solid color-mix(in srgb, var(--bd-accent) 35%, var(--bd-line));
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px 0 8px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bd-kind) 25%, transparent), var(--bd-header) 70%);
+  border-bottom: 2px solid var(--bd-kind);
   border-radius: calc(var(--bd-radius) - 1px) calc(var(--bd-radius) - 1px) 0 0;
-  font-size: 12.5px;
+  color: var(--bd-title-node);
+  font-size: var(--bd-fs-sm);
   font-weight: 600;
+  cursor: grab;
 }
-.bd-collapsed.is-pill .bd-collapsed-head { margin: 0; border-bottom: none; border-radius: calc(var(--bd-radius) - 1px); }
-.bd-collapsed-title { white-space: nowrap; }
+.bd-collapsed-head .bd-icon { color: var(--bd-kind); }
+.bd-collapsed.is-pill .bd-collapsed-head { border-bottom: none; border-radius: calc(var(--bd-radius) - 1px); }
+.bd-collapsed-title { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--bd-dur) var(--bd-ease); }
 .bd-collapsed-head .bd-hint { margin-left: auto; }
-.bd-collapsed-body { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.45rem; min-height: 24px; }
+.bd-collapsed-body { display: flex; justify-content: space-between; gap: 12px; padding: 8px 8px 0; min-height: 24px; }
 /* Legacy: rails inside a collapsed body (kept for any caller that still renders them there). */
 .bd-collapsed .bd-rail { position: static; transform: none; }
 .bd-collapsed .bd-rail-out { align-items: flex-end; }
@@ -391,7 +831,7 @@
   height: 11px;
   border: 2px solid var(--bd-bg);
   border-radius: 50%;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 .bd-collapsed .react-flow__handle.bd-hub.react-flow__handle-left { left: -7px; }
 .bd-collapsed .react-flow__handle.bd-hub.react-flow__handle-right { right: -7px; }
@@ -417,362 +857,417 @@
   border: none;
 }
 
-/* ── React Flow chrome, edges, handles ──────────────────────────────────────── */
+/* ── the pin, and the faces it feeds ───────────────────────────────────────── */
 
-.bd-root .react-flow__controls {
-  box-shadow: var(--bd-shadow);
+/* A NodeToolbar: a floating glass strip above the node. */
+.bd-nodebar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+  padding: 3px;
+  background: var(--bd-glass);
+  backdrop-filter: var(--bd-blur);
+  -webkit-backdrop-filter: var(--bd-blur);
   border: 1px solid var(--bd-line);
-  border-radius: var(--bd-radius-sm);
-  overflow: hidden;
+  border-radius: var(--bd-r-md);
+  box-shadow: var(--bd-shadow-menu), var(--bd-hairline);
+  animation: bd-pop var(--bd-dur) var(--bd-ease);
 }
-.bd-root .react-flow__controls-button {
-  background: var(--bd-raised);
-  border-bottom: 1px solid var(--bd-line);
-  fill: var(--bd-text);
+.bd-nodebar-kind { font-size: var(--bd-fs-3xs); font-weight: 600; letter-spacing: var(--bd-track-caps-wide); text-transform: uppercase; color: var(--bd-dim); align-self: center; padding: 0 6px 0 5px; }
+.bd-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 24px;
   height: 24px;
-}
-.bd-root .react-flow__controls-button:hover { background: #2e2e3b; }
-.bd-root .react-flow__attribution { display: none; }
-.bd-root .react-flow__edge-path { stroke-width: 1.8; transition: stroke-width 0.1s; }
-.bd-root .react-flow__edge:hover .react-flow__edge-path,
-.bd-root .react-flow__edge.selected .react-flow__edge-path { stroke-width: 2.6; }
-.bd-root .react-flow__edge.selected .react-flow__edge-path { filter: drop-shadow(0 0 3px rgb(255 255 255 / 0.35)); }
-.bd-root .react-flow__connection-path { stroke-width: 2; }
-.bd-root .react-flow__handle { transition: transform 0.1s; }
-.bd-root .react-flow__handle:hover { transform: translate(0, -50%) scale(1.35); }
-.bd-root .react-flow__handle.react-flow__handle-left:hover,
-.bd-root .react-flow__handle.react-flow__handle-right:hover { transform: translate(0, -50%) scale(1.35); }
-
-/* The pin, and the collapsed face it feeds. */
-.bd-nodebar { display: flex; gap: 4px; position: relative; }
-.bd-pin {
-  background: var(--bd-raised);
-  border: 1px solid var(--bd-line);
-  border-radius: var(--bd-radius-sm);
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--bd-r-sm);
+  color: var(--bd-dim);
   cursor: pointer;
-  font-size: 11px;
-  line-height: 1;
-  padding: 3px 6px;
-  filter: grayscale(1);
-  opacity: 0.7;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
 }
-.bd-pin:hover { border-color: var(--bd-pin); opacity: 1; }
-.bd-pin.is-on { filter: none; opacity: 1; border-color: var(--bd-pin); background: #3a2f10; }
-.bd-node.is-promoted { box-shadow: 0 -2px 0 0 var(--bd-pin) inset, var(--bd-shadow); }
+.bd-pin:hover { background: var(--bd-fill-8); color: var(--bd-text); }
+.bd-pin.is-on { color: var(--bd-pin); background: var(--bd-warn-10); border-color: var(--bd-warn-30); }
+.bd-node.is-promoted { box-shadow: inset 0 -2px 0 0 var(--bd-pin), var(--bd-shadow-node); }
 
-.bd-faces { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 140px; }
-.bd-face {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  background: var(--bd-raised);
-  border: 1px solid var(--bd-line);
-  border-left: 2px solid var(--bd-pin);
-  border-radius: var(--bd-radius-sm);
-  padding: 0.2rem 0.45rem;
-  font-size: 11px;
-}
-.bd-face-detail { color: var(--bd-ok); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
-.bd-faces-empty { color: var(--bd-dim); font-size: 10px; font-style: italic; text-align: center; padding: 0.3rem 0; }
-
-/* Right-click palette. ABSOLUTE within .bd-canvas, never fixed: `position: fixed` resolves
-   against the nearest transformed ancestor, and the panel's modal has a transform. */
-.bd-menu {
-  position: absolute;
-  z-index: 40;
-  min-width: 176px;
-  background: var(--bd-panel);
-  border: 1px solid var(--bd-line-2);
-  border-radius: 8px;
-  box-shadow: var(--bd-shadow);
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.bd-menu-head { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--bd-dim); padding: 0.3rem 0.5rem 0.2rem; }
-.bd-menu button {
-  background: none;
-  border: none;
-  color: var(--bd-text);
-  text-align: left;
-  font: inherit;
-  padding: 0.32rem 0.55rem;
-  border-radius: 5px;
-  cursor: pointer;
-}
-.bd-menu button:hover { background: var(--bd-raised); }
-
-.bd-title-text { cursor: text; }
-.bd-title-input {
-  background: var(--bd-bg);
-  color: var(--bd-text);
-  border: 1px solid var(--bd-accent);
-  border-radius: 4px;
-  font: inherit;
-  font-weight: 600;
-  padding: 0 0.25rem;
-  min-width: 120px;
-  outline: none;
-}
-
-/* React Flow paints its own selection box-shadow on every node. Ours already says
-   "selected" with an accent border, and the two together read as a doubled outline —
-   especially on a Beat, where RF's rectangle ignores the rounded corners. */
-.bd-root .react-flow__node.selected,
-.bd-root .react-flow__node:focus,
-.bd-root .react-flow__node:focus-visible { box-shadow: none; outline: none; }
-.bd-group.is-selected, .bd-subgraph.is-selected {
-  border-color: var(--bd-accent);
-  box-shadow: 0 0 0 1px var(--bd-accent), 0 0 24px rgb(167 139 250 / 0.16);
-}
-.bd-root .react-flow__resize-control.handle {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  background: var(--bd-accent);
-  border: 1px solid var(--bd-bg);
-}
-.bd-root .react-flow__resize-control.line { border-color: transparent; }
-
-.bd-nodebar-kind { font-size: 9px; letter-spacing: 0.08em; color: var(--bd-dim); align-self: center; padding-right: 0.2rem; }
 .bd-tbtn {
-  background: var(--bd-raised);
-  color: var(--bd-text);
-  border: 1px solid var(--bd-line);
-  border-radius: var(--bd-radius-sm);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 0.18rem 0.45rem;
-  cursor: pointer;
-}
-.bd-tbtn:hover { border-color: var(--bd-accent); }
-.bd-tbtn.is-on { background: #3b2a66; border-color: var(--bd-accent); color: #f3e8ff; }
-
-/* ── edges: midpoint control + menu ─────────────────────────────────────────── */
-.bd-root .bd-edge-mid { opacity: 0; cursor: pointer; transition: opacity 0.12s; pointer-events: all; }
-.bd-root .react-flow__edge:hover .bd-edge-mid, .bd-root .bd-edge-mid.is-open { opacity: 1; }
-.bd-edge-menu {
-  position: absolute;
-  pointer-events: all;
-  z-index: 30;
-  min-width: 156px;
-  background: var(--bd-panel);
-  border: 1px solid var(--bd-line-2);
-  border-radius: 8px;
-  box-shadow: var(--bd-shadow);
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.bd-edge-menu button {
-  background: none;
-  border: none;
-  color: var(--bd-text);
-  text-align: left;
-  font: inherit;
-  font-size: 12px;
-  padding: 0.32rem 0.55rem;
-  border-radius: 5px;
-  cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-}
-.bd-edge-menu button:hover:not(:disabled) { background: var(--bd-raised); }
-.bd-edge-menu button.is-danger:hover { background: #3b1a1a; color: var(--bd-bad); }
-.bd-edge-menu button:disabled { color: var(--bd-faint); cursor: not-allowed; }
-.bd-tbd { margin-left: auto; font-size: 9px; letter-spacing: 0.06em; border: 1px solid var(--bd-line-2); border-radius: 4px; padding: 0 0.25rem; }
-.bd-carry-line { animation: bd-dash 0.6s linear infinite; }
-@keyframes bd-dash { to { stroke-dashoffset: -10; } }
-
-/* ── palette ────────────────────────────────────────────────────────────────── */
-.bd-palette {
-  position: absolute;
-  z-index: 40;
-  width: 240px;
-  background: var(--bd-panel);
-  border: 1px solid var(--bd-line-2);
-  border-radius: var(--bd-radius);
-  box-shadow: var(--bd-shadow);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.bd-palette-head { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--bd-dim); padding: 0.45rem 0.65rem 0; }
-.bd-palette-input {
-  margin: 0.35rem 0.5rem;
-  background: var(--bd-bg);
-  color: var(--bd-text);
-  border: 1px solid var(--bd-line);
-  border-radius: var(--bd-radius-sm);
-  font: inherit;
-  padding: 0.32rem 0.5rem;
-  outline: none;
-}
-.bd-palette-input:focus { border-color: var(--bd-accent); }
-.bd-palette-list { max-height: 260px; overflow-y: auto; padding: 0 0.3rem 0.3rem; }
-.bd-palette-group { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--bd-faint); padding: 0.4rem 0.45rem 0.15rem; }
-.bd-palette-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  background: none;
-  border: none;
-  color: var(--bd-text);
-  font: inherit;
-  text-align: left;
-  padding: 0.32rem 0.45rem;
-  border-radius: var(--bd-radius-sm);
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--bd-dim);
+  border: 1px solid transparent;
+  border-radius: var(--bd-r-sm);
+  font: 500 var(--bd-fs-xs)/1 var(--bd-font);
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
 }
-.bd-palette-item.is-cursor { background: var(--bd-raised); }
-.bd-palette-item.is-disabled { color: var(--bd-faint); cursor: not-allowed; }
-.bd-palette-hint { margin-left: auto; font-size: 10px; color: var(--bd-dim); }
-.bd-palette-empty { color: var(--bd-dim); font-size: 11px; padding: 0.5rem; text-align: center; }
-
-/* ── swatches, chips, faces ─────────────────────────────────────────────────── */
-.bd-tbtn-swatch { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 2px solid var(--bd-bg); }
+.bd-tbtn:hover { background: var(--bd-fill-8); color: var(--bd-text); }
+.bd-tbtn.is-on { background: var(--bd-accent-10); border-color: var(--bd-accent-30); color: var(--bd-accent-fg); }
+.bd-tbtn.is-danger:hover { background: var(--bd-bad-10); border-color: var(--bd-bad-30); color: var(--bd-bad-fg); }
+.bd-tbtn-swatch { width: 24px; padding: 0; border-radius: 50%; }
+.bd-tbtn-swatch::after { content: ""; width: 12px; height: 12px; border-radius: 50%; background: inherit; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25); }
+.bd-tbtn.bd-tbtn-swatch { background-clip: content-box; padding: 5px; border-color: transparent; }
+.bd-tbtn.bd-tbtn-swatch:hover { background-color: inherit; }
 .bd-swatches {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   display: flex;
-  gap: 5px;
+  gap: 6px;
   align-items: center;
   flex-wrap: wrap;
-  background: var(--bd-panel);
-  border: 1px solid var(--bd-line-2);
-  border-radius: 8px;
-  padding: 6px;
+  max-width: 200px;
+  background: var(--bd-glass);
+  backdrop-filter: var(--bd-blur);
+  -webkit-backdrop-filter: var(--bd-blur);
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-md);
+  padding: 8px;
   z-index: 5;
-  box-shadow: var(--bd-shadow);
+  box-shadow: var(--bd-shadow-float), var(--bd-hairline);
+  animation: bd-pop var(--bd-dur) var(--bd-ease);
 }
-.bd-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
-.bd-swatch.is-on { border-color: #fff; }
-.bd-swatch-hex { width: 64px; background: var(--bd-bg); color: var(--bd-text); border: 1px solid var(--bd-line); border-radius: 5px; font: inherit; font-size: 11px; padding: 1px 4px; }
-.bd-title-grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bd-chip {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--bd-dim);
-  border: 1px solid var(--bd-line-2);
-  border-radius: 999px;
-  padding: 0 0.4rem;
-  line-height: 1.5;
-  flex: none;
+.bd-swatch { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12); cursor: pointer; transition: transform var(--bd-dur-fast) var(--bd-ease); }
+.bd-swatch:hover { transform: scale(1.12); }
+.bd-swatch.is-on { border-color: var(--bd-bg-2); box-shadow: 0 0 0 1.5px #fff; }
+.bd-swatch-hex {
+  width: 72px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--bd-text);
+  border: 1px solid var(--bd-line-input);
+  border-radius: 7px;
+  font: 500 var(--bd-fs-xs)/1 var(--bd-font-mono);
+  padding: 0 6px;
+  outline: none;
 }
-.bd-face-scene { gap: 0.4rem; }
-.bd-face-stepper { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
+.bd-swatch-hex:focus { border-color: var(--bd-ring-accent); box-shadow: 0 0 0 1px var(--bd-ring-accent); }
+
+/* Faces: the pinned controls on a collapsed Beat. Quiet rows on a white/5 fill. */
+.bd-faces { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 140px; }
+.bd-face {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+  background: var(--bd-fill-5);
+  border: 1px solid var(--bd-line-soft);
+  border-radius: var(--bd-r-sm);
+  padding: 0 6px 0 8px;
+  font-size: var(--bd-fs-xs);
+  color: var(--bd-text-node);
+  transition: background-color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
+}
+.bd-face:hover { background: var(--bd-fill-8); border-color: var(--bd-line); }
+.bd-face-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-face-icon { display: inline-flex; color: var(--bd-dim); }
+.bd-face-detail { color: var(--bd-ok-fg); font-size: var(--bd-fs-3xs); font-weight: 600; text-transform: uppercase; letter-spacing: var(--bd-track-caps); }
+.bd-faces-empty { color: var(--bd-dim); font-size: var(--bd-fs-2xs); text-align: center; padding: 6px 0; }
+.bd-face-scene { gap: 6px; }
+.bd-face-stepper { display: inline-flex; align-items: center; gap: 1px; margin-left: auto; }
 .bd-face-stepper button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
   height: 18px;
-  line-height: 1;
   padding: 0;
-  background: var(--bd-panel);
-  color: var(--bd-text);
-  border: 1px solid var(--bd-line);
-  border-radius: 4px;
+  background: transparent;
+  color: var(--bd-dim);
+  border: 1px solid transparent;
+  border-radius: 6px;
   cursor: pointer;
   font: inherit;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease);
 }
-.bd-face-stepper button:hover { border-color: var(--bd-line-2); }
-.bd-face-value { font-size: 10.5px; min-width: 24px; text-align: center; color: var(--bd-text); }
-.bd-face-input { background: var(--bd-bg); color: var(--bd-text); border: 1px solid var(--bd-accent); border-radius: 4px; font: inherit; font-size: 11px; padding: 0 0.25rem; width: 120px; }
-.bd-face-icon { font-size: 12px; }
-
-.bd-project {
-  background: var(--bd-raised);
+.bd-face-stepper button:hover { background: var(--bd-fill-10); color: var(--bd-text); }
+.bd-face-value { font: 500 var(--bd-fs-2xs)/1 var(--bd-font-mono); font-variant-numeric: tabular-nums; min-width: 26px; text-align: center; color: var(--bd-text); }
+.bd-face-input {
+  height: 20px;
+  background: rgba(0, 0, 0, 0.4);
   color: var(--bd-text);
-  border: 1px solid var(--bd-line);
-  border-radius: var(--bd-radius-sm);
-  font: inherit;
-  font-size: 12px;
-  padding: 0.24rem 0.4rem;
-  max-width: 220px;
+  border: 1px solid var(--bd-ring-accent);
+  border-radius: 6px;
+  font: 500 var(--bd-fs-xs)/1 var(--bd-font);
+  padding: 0 6px;
+  width: 120px;
+  outline: none;
 }
-.bd-project:focus { outline: none; border-color: var(--bd-accent); }
 
-.bd-sync { font-size: 11px; color: var(--bd-dim); padding: 0.18rem 0.5rem; border: 1px solid var(--bd-line); border-radius: 999px; }
-.bd-sync.is-saving { color: var(--bd-warn); border-color: #4a3f10; }
-.bd-sync.is-saved { color: var(--bd-ok); border-color: #1f4d2e; }
-.bd-sync.is-error { color: var(--bd-bad); border-color: #5a2222; }
-
-
-/* ── [U0] foundation chrome: layout, tabs, docks, buttons, inputs, modal ─────────────── */
-.bd-body { flex: 1; min-height: 0; display: flex; }
-.bd-dock { display: flex; flex-direction: column; min-height: 0; overflow: auto; background: var(--bd-bg); }
-.bd-dock:empty { display: none; }
-.bd-dock-left { border-right: 1px solid var(--bd-line); }
-.bd-dock-right { border-left: 1px solid var(--bd-line); }
-.bd-tabs { display: flex; align-items: stretch; height: 36px; background: var(--bd-bg); border-bottom: 1px solid var(--bd-line); }
-.bd-tab {
-  display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; background: none; border: none;
-  border-right: 1px solid var(--bd-line); border-bottom: 2px solid transparent; color: var(--bd-dim);
-  font: 500 var(--bd-fs-sm)/1 var(--bd-font); cursor: pointer; transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease);
+/* Inline rename inputs (container title, node title). */
+.bd-title-text { cursor: text; }
+.bd-title-input {
+  height: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--bd-text);
+  border: 1px solid var(--bd-ring-accent);
+  border-radius: 6px;
+  font: 600 var(--bd-fs-xs)/1 var(--bd-font);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  padding: 0 6px;
+  min-width: 120px;
+  outline: none;
 }
-.bd-tab:hover { background: rgba(255, 255, 255, 0.04); color: #e2e8f0; }
-.bd-tab.is-active { background: var(--bd-bg-2); color: var(--bd-text); border-bottom-color: var(--bd-accent); }
-.bd-tab-badge { margin-left: 4px; padding: 0 6px; border-radius: var(--bd-r-pill); background: rgba(34, 211, 238, 0.12); border: 1px solid rgba(34, 211, 238, 0.3); color: #a5f3fc; font-size: var(--bd-fs-2xs); }
-.bd-panel-host { position: absolute; inset: 0; z-index: 20; overflow: auto; background: var(--bd-bg-2); padding: 12px; }
 
-.bd-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 10px;
-  border-radius: var(--bd-r-md); border: 1px solid var(--bd-line); background: var(--bd-panel); color: var(--bd-text);
-  font: 500 var(--bd-fs-sm)/1 var(--bd-font); cursor: pointer; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
-}
-.bd-btn:hover { background: var(--bd-hover); }
-.bd-btn:disabled { opacity: 0.5; cursor: default; }
-.bd-btn.is-primary { background: var(--bd-primary); color: var(--bd-primary-fg); border-color: transparent; }
-.bd-btn.is-primary:hover { background: #e5e5e5; }
-.bd-btn.is-danger { color: var(--bd-bad); border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); }
-.bd-btn.is-danger:hover { background: rgba(239, 68, 68, 0.18); }
-.bd-btn.is-ghost { background: transparent; border-color: transparent; color: var(--bd-dim); }
-.bd-btn.is-ghost:hover { background: var(--bd-raised); color: var(--bd-text); }
-.bd-btn.is-icon { width: 28px; padding: 0; }
-.bd-btn:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--bd-ring); }
+/* ── popovers: right-click palette, menus ──────────────────────────────────── */
 
-.bd-input {
-  height: 28px; padding: 0 8px; border-radius: var(--bd-r-sm); border: 1px solid var(--bd-line-soft);
-  background: rgba(0, 0, 0, 0.35); box-shadow: var(--bd-hairline); color: var(--bd-text);
-  font: 500 var(--bd-fs-xs)/1.3 var(--bd-font); font-variant-numeric: tabular-nums; outline: none; width: 100%; box-sizing: border-box;
-}
-textarea.bd-input { height: auto; padding: 6px 8px; resize: vertical; line-height: 1.4; }
-.bd-input::placeholder { color: var(--bd-dim-2); }
-.bd-input:focus { border-color: rgba(255, 255, 255, 0.16); background: rgba(0, 0, 0, 0.4); }
-.bd-input.form { height: 36px; padding: 0 12px; border-radius: var(--bd-r-md); border-color: var(--bd-line-input); background: var(--bd-panel); font-size: var(--bd-fs-base); }
-
-.bd-chip-state { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: var(--bd-r-md); border: 1px solid rgba(255, 255, 255, 0.07); background: rgba(10, 10, 10, 0.7); font-size: var(--bd-fs-2xs); color: #cbd5e1; }
-.bd-chip-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--chip-color, var(--bd-neutral)); }
-.bd-chip-state.ok { --chip-color: var(--bd-ok); border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.1); color: #6ee7b7; }
-.bd-chip-state.warn { --chip-color: var(--bd-warn); border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.1); color: #fde68a; }
-.bd-chip-state.err { --chip-color: var(--bd-bad); border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); color: #fca5a5; }
-.bd-chip-state.info { --chip-color: var(--bd-accent-2); border-color: rgba(96, 165, 250, 0.3); background: rgba(96, 165, 250, 0.1); color: #bfdbfe; }
-
-.bd-badge.is-queued { color: #bfdbfe; background: rgba(96, 165, 250, 0.12); border-color: rgba(96, 165, 250, 0.3); }
-.bd-badge.is-rendering { color: #a5f3fc; background: rgba(34, 211, 238, 0.12); border-color: rgba(34, 211, 238, 0.3); animation: bd-pulse-text 1.15s ease-in-out infinite; }
-.bd-badge.is-failed { color: #fca5a5; background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.3); }
-@keyframes bd-pulse-text { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
-
-.bd-dyn { display: flex; flex-direction: column; gap: 8px; }
-.bd-dyn-field { display: flex; flex-direction: column; gap: 4px; }
-.bd-dyn-label { font-size: var(--bd-fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: var(--bd-track-caps); color: var(--bd-dim); }
-.bd-dyn-field.is-bad .bd-input { border-color: rgba(239, 68, 68, 0.6); }
-
-.bd-modal-backdrop { position: absolute; inset: 0; z-index: 60; background: var(--bd-scrim); display: flex; align-items: center; justify-content: center; }
-.bd-modal { width: min(440px, 92%); max-height: 88%; overflow: auto; padding: 20px; border-radius: var(--bd-r-xl); border: 1px solid var(--bd-line); background: var(--bd-panel); box-shadow: var(--bd-shadow-float); animation: bd-in var(--bd-dur-slow) var(--bd-ease); }
-.bd-modal-title { font-size: var(--bd-fs-base); font-weight: 600; margin-bottom: 8px; }
-.bd-modal-body { color: var(--bd-dim); font-size: var(--bd-fs-sm); margin-bottom: 12px; line-height: 1.5; }
-.bd-modal-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; font-size: var(--bd-fs-2xs); text-transform: uppercase; letter-spacing: var(--bd-track-caps); color: var(--bd-dim); }
-.bd-modal-choices { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-.bd-modal-choices .bd-btn { justify-content: space-between; height: auto; padding: 8px 10px; }
-.bd-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+@keyframes bd-pop { from { opacity: 0; transform: scale(0.95) translateY(-8px); } }
 @keyframes bd-in { from { opacity: 0; transform: scale(0.96) translateY(-4px); } }
 
+/* Right-click palette. ABSOLUTE within .bd-canvas, never fixed: `position: fixed` resolves
+   against the nearest transformed ancestor, and the panel's modal has a transform. */
+.bd-palette {
+  position: absolute;
+  z-index: 40;
+  width: 240px;
+  background: var(--bd-glass);
+  backdrop-filter: var(--bd-blur);
+  -webkit-backdrop-filter: var(--bd-blur);
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-radius);
+  box-shadow: var(--bd-shadow-float), var(--bd-hairline);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: bd-pop var(--bd-dur) var(--bd-ease);
+  transform-origin: top left;
+}
+.bd-palette-head { padding: 10px 12px 0; }
+.bd-palette-input {
+  margin: 0;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--bd-text);
+  border: none;
+  border-bottom: 1px solid var(--bd-line);
+  border-radius: 0;
+  font: 500 var(--bd-fs-sm)/1.2 var(--bd-font);
+  outline: none;
+}
+.bd-palette-input::placeholder { color: var(--bd-dim-2); }
+.bd-palette-input:focus { border-bottom-color: var(--bd-accent-30); }
+.bd-palette-list { max-height: 260px; overflow-y: auto; padding: 4px; }
+.bd-palette-group { padding: 8px 8px 4px; color: var(--bd-faint); }
+.bd-palette-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  background: none;
+  border: none;
+  color: var(--bd-text);
+  font: 500 var(--bd-fs-sm)/1 var(--bd-font);
+  text-align: left;
+  padding: 0 8px;
+  border-radius: var(--bd-r-sm);
+  cursor: pointer;
+  transition: background-color var(--bd-dur) var(--bd-ease);
+}
+.bd-palette-icon { display: inline-flex; align-items: center; width: 14px; justify-content: center; color: var(--bd-dim); }
+.bd-palette-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+.bd-palette-item.is-cursor { background: var(--bd-hover); }
+.bd-palette-item.is-cursor .bd-palette-icon { color: var(--bd-text); }
+.bd-palette-item.is-disabled { color: var(--bd-faint); cursor: not-allowed; }
+.bd-palette-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-palette-hint { margin-left: auto; font: 500 var(--bd-fs-2xs)/1 var(--bd-font-mono); color: var(--bd-dim-2); }
+.bd-palette-empty { color: var(--bd-dim); font-size: var(--bd-fs-xs); padding: 12px; text-align: center; }
+
+/* Menus (edge midpoint, context). Glass, 12.8px, items 12px on a 9.6px hover. */
+.bd-menu,
+.bd-edge-menu {
+  position: absolute;
+  z-index: 40;
+  min-width: 168px;
+  background: var(--bd-glass);
+  backdrop-filter: var(--bd-blur);
+  -webkit-backdrop-filter: var(--bd-blur);
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-md);
+  box-shadow: var(--bd-shadow-float), var(--bd-hairline);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  animation: bd-pop var(--bd-dur) var(--bd-ease);
+}
+.bd-edge-menu { pointer-events: all; z-index: 30; }
+.bd-menu-head { padding: 6px 8px 4px; }
+.bd-menu button,
+.bd-edge-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  background: none;
+  border: none;
+  color: var(--bd-text);
+  text-align: left;
+  font: 500 var(--bd-fs-sm)/1 var(--bd-font);
+  padding: 0 8px;
+  border-radius: var(--bd-r-sm);
+  cursor: pointer;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease);
+}
+.bd-menu button .bd-icon,
+.bd-edge-menu button .bd-icon { color: var(--bd-dim); }
+.bd-menu button:hover:not(:disabled),
+.bd-edge-menu button:hover:not(:disabled) { background: var(--bd-hover); }
+.bd-menu button:hover:not(:disabled) .bd-icon,
+.bd-edge-menu button:hover:not(:disabled) .bd-icon { color: var(--bd-text); }
+.bd-menu button.is-danger:hover,
+.bd-edge-menu button.is-danger:hover { background: var(--bd-bad-10); color: var(--bd-bad-fg); }
+.bd-menu button.is-danger:hover .bd-icon,
+.bd-edge-menu button.is-danger:hover .bd-icon { color: var(--bd-bad-fg); }
+.bd-menu button:disabled,
+.bd-edge-menu button:disabled { color: var(--bd-faint); cursor: not-allowed; }
+.bd-menu button:disabled .bd-icon,
+.bd-edge-menu button:disabled .bd-icon { color: var(--bd-faint); }
+.bd-tbd { margin-left: auto; font: 600 var(--bd-fs-3xs)/14px var(--bd-font); letter-spacing: var(--bd-track-caps); text-transform: uppercase; border: 1px solid var(--bd-line); border-radius: var(--bd-r-pill); padding: 0 5px; color: var(--bd-dim-2); }
+
+/* ── edges ─────────────────────────────────────────────────────────────────── */
+
+.bd-root .react-flow__edge-path { stroke-width: 1.8; transition: stroke-width var(--bd-dur-fast) var(--bd-ease); }
+.bd-root .react-flow__edge:hover .react-flow__edge-path,
+.bd-root .react-flow__edge.selected .react-flow__edge-path { stroke-width: 2.6; }
+.bd-root .react-flow__edge.selected .react-flow__edge-path { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.35)); }
+.bd-root .react-flow__connection-path { stroke-width: 2; }
+.bd-root .bd-edge-mid { opacity: 0; cursor: pointer; transition: opacity var(--bd-dur) var(--bd-ease); pointer-events: all; }
+.bd-root .react-flow__edge:hover .bd-edge-mid, .bd-root .bd-edge-mid.is-open { opacity: 1; }
+.bd-carry-line { animation: bd-dash 0.6s linear infinite; }
+@keyframes bd-dash { to { stroke-dashoffset: -10; } }
+
+/* ── React Flow chrome: controls, minimap, selection, resize ───────────────── */
+
+.bd-root .react-flow__panel { margin: 12px; }
+.bd-root .react-flow__controls {
+  display: flex;
+  flex-direction: column;
+  padding: 3px;
+  gap: 2px;
+  background: var(--bd-glass);
+  backdrop-filter: var(--bd-blur);
+  -webkit-backdrop-filter: var(--bd-blur);
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-md);
+  box-shadow: var(--bd-shadow-menu), var(--bd-hairline);
+  overflow: hidden;
+}
+.bd-root .react-flow__controls-button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--bd-r-sm);
+  color: var(--bd-dim);
+  fill: currentColor;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease);
+}
+.bd-root .react-flow__controls-button svg { max-width: 12px; max-height: 12px; fill: currentColor; }
+.bd-root .react-flow__controls-button:hover { background: var(--bd-raised); color: var(--bd-text); }
+.bd-root .react-flow__attribution { display: none; }
+.bd-root .react-flow__minimap {
+  background: var(--bd-glass);
+  backdrop-filter: var(--bd-blur);
+  -webkit-backdrop-filter: var(--bd-blur);
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-md);
+  box-shadow: var(--bd-shadow-menu), var(--bd-hairline);
+  overflow: hidden;
+}
+.bd-root .react-flow__minimap-svg { display: block; }
+.bd-root .react-flow__minimap-node { rx: 3px; ry: 3px; }
+
+/* React Flow paints its own selection box-shadow on every node. Ours already says "selected"
+   with an outline, and the two together read as a doubled outline — especially on a Beat, where
+   RF's rectangle ignores the rounded corners. */
+.bd-root .react-flow__node.selected,
+.bd-root .react-flow__node:focus,
+.bd-root .react-flow__node:focus-visible { box-shadow: none; outline: none; }
+.bd-root .react-flow__resize-control.handle {
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-radius: 5px;
+  background: #fafafa;
+  background-clip: content-box;
+}
+/* The edge resizers are invisible; RF ships them as a 2px strip. Widen to 4px so a grab lands
+   whichever box model the host page imposes on us. */
+.bd-root .react-flow__resize-control.line { border-color: transparent; border-width: 0; }
+.bd-root .react-flow__resize-control.line.left,
+.bd-root .react-flow__resize-control.line.right { width: 4px; }
+.bd-root .react-flow__resize-control.line.top,
+.bd-root .react-flow__resize-control.line.bottom { height: 4px; }
+.bd-root .react-flow__nodesselection-rect { border: 1px dashed rgba(34, 211, 238, 0.5); background: rgba(34, 211, 238, 0.04); border-radius: 4px; }
+
+/* Container hit-testing is NOT a paint concern: U1 puts containers behind their children with
+   a z-order convention, so a Beat is grabbable by its body while a wire crossing it stays
+   clickable. The old `pointer-events: none !important` hack lived here; do not bring it back. */
+
+/* ── dynamic form ──────────────────────────────────────────────────────────── */
+
+.bd-dyn { display: flex; flex-direction: column; gap: 10px; }
+.bd-dyn-field { display: flex; flex-direction: column; gap: 4px; }
+.bd-dyn-field.is-bad .bd-input { border-color: rgba(239, 68, 68, 0.6); }
+.bd-dyn-field.is-bad .bd-dyn-label { color: var(--bd-bad-fg); }
+.bd-dyn-help { font-size: var(--bd-fs-2xs); color: var(--bd-dim-2); }
+
+/* ── modal: 28.8px, glass, on a black/80 scrim ─────────────────────────────── */
+
+.bd-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  background: var(--bd-scrim);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: bd-fade var(--bd-dur) var(--bd-ease);
+}
+@keyframes bd-fade { from { opacity: 0; } }
+.bd-modal {
+  width: min(440px, 92%);
+  max-height: 88%;
+  overflow: auto;
+  padding: 20px;
+  border-radius: var(--bd-r-2xl);
+  border: 1px solid var(--bd-line);
+  background: var(--bd-glass);
+  backdrop-filter: var(--bd-blur);
+  -webkit-backdrop-filter: var(--bd-blur);
+  box-shadow: var(--bd-shadow-float), var(--bd-hairline);
+  animation: bd-in var(--bd-dur-slow) var(--bd-ease);
+}
+.bd-modal-title { font-size: var(--bd-fs-base); font-weight: 600; letter-spacing: -0.005em; margin-bottom: 6px; color: var(--bd-text); }
+.bd-modal-body { color: var(--bd-dim); font-size: var(--bd-fs-sm); margin-bottom: 14px; line-height: 1.5; }
+.bd-modal-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: var(--bd-fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: var(--bd-track-caps); color: var(--bd-dim); }
+.bd-modal-field .bd-input { height: 32px; font-size: var(--bd-fs-sm); text-transform: none; letter-spacing: 0; font-weight: 500; }
+.bd-modal-choices { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.bd-modal-choices .bd-btn { justify-content: space-between; height: auto; padding: 9px 12px; border-radius: var(--bd-r-md); }
+.bd-modal-choices .bd-hint { color: var(--bd-dim-2); }
+.bd-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── icons ─────────────────────────────────────────────────────────────────── */
+
 .bd-icon { vertical-align: -2px; flex: none; }
+
+/* ── motion off ────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .bd-root *, .bd-root *::before, .bd-root *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

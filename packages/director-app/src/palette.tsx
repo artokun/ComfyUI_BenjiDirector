@@ -116,7 +116,7 @@ export function Palette({ x, y, title, items, onPick, onClose }: PaletteProps) {
                   onClick={() => pick(it)}
                   title={it.hint}
                 >
-                  <span className="bd-palette-icon">{it.icon ? <Icon name={it.icon} /> : "•"}</span>
+                  <span className="bd-palette-icon">{it.icon ? <Icon name={it.icon} /> : <span className="bd-palette-dot" />}</span>
                   <span className="bd-palette-label">{it.label}</span>
                   {it.hint ? <span className="bd-palette-hint">{it.hint}</span> : null}
                 </button>

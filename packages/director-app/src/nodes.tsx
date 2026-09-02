@@ -32,7 +32,7 @@ import {
   type NodeProps,
   type ReactFlowState,
 } from "@xyflow/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { emptySlotHandle, innerHandleId, type BoundaryPort } from "@benjidirector/graph-core";
 import { useActions } from "./actions.js";
 import { FaceRow } from "./faces.jsx";
@@ -60,8 +60,9 @@ const PILL_MAX_CHARS = 22;
 const PILL_MIN_CHARS = 3;
 
 
-/** Opaque pill fill derived from the container's tint, so rails read as the same accent. */
-const pillBg = (color: string) => `color-mix(in srgb, #000 55%, ${color})`;
+/** Pill fill: the container's tint at 14% over the panel surface — the accent-pill recipe
+ *  (tint/10 fill, tint/35 border) with the Beat's colour standing in for cyan. */
+const pillBg = (color: string) => `color-mix(in srgb, ${color} 14%, #171717)`;
 
 /**
  * Width, in `ch`, shared by every pill in a rail: the widest label, clamped. A pill being
@@ -288,7 +289,7 @@ export function GroupNode({ id, data, selected }: NodeProps) {
     return (
       <div
         className={`bd-collapsed bd-collapsed-group is-pill${selected ? " is-selected" : ""}`}
-        style={{ width: "100%", height: "auto", borderColor: tint, background: `color-mix(in srgb, ${tint} 10%, #1e1e26)` }}
+        style={{ width: "100%", height: "auto", "--bd-kind": tint } as CSSProperties}
       >
         {/* Width only, as on the subgraph card: the card is content-height by definition. */}
         <NodeResizer
@@ -565,7 +566,7 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
         actions?.toggleCollapse(id);
       }}
     >
-      {collapsed ? "▶" : "▼"}
+      <Icon name={collapsed ? "chevronRight" : "chevronDown"} size={12} />
     </button>
   );
 
@@ -580,7 +581,7 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
     return (
       <div
         className={`bd-collapsed${pill ? " is-pill" : ""}${selected ? " is-selected" : ""}`}
-        style={{ width: "100%", height: "auto", borderColor: tint, background: `color-mix(in srgb, ${tint} 10%, #1e1e26)` }}
+        style={{ width: "100%", height: "auto", "--bd-kind": tint } as CSSProperties}
       >
         {/* Width only: a collapsed card is content-height by definition. The width the user
             chooses here is remembered as the card's own, separate from the expanded box. */}
