@@ -8,11 +8,14 @@
 
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Icon } from "./icons.jsx"; // [U8b] the Reroute item
 
 export interface EdgeActions {
   deleteEdge(edgeId: string): void;
   /** Insert a scene on this wire at the given flow position, splicing it in if the types allow. */
   insertOnEdge(edgeId: string, at: { x: number; y: number }): void;
+  /** [U8b] Drop a reroute dot on this wire at the given flow position, bending it in two. */
+  rerouteEdge(edgeId: string, at: { x: number; y: number }): void;
 }
 export const EdgeActionsContext = createContext<EdgeActions | null>(null);
 
@@ -87,9 +90,15 @@ export function DirectorEdge(props: EdgeProps) {
             >
               ✕ Delete
             </button>
-            <button type="button" disabled title="Reroute — coming later">
-              ↪ Reroute
-              <span className="bd-tbd">TBD</span>
+            <button
+              type="button"
+              title="Put a reroute dot here — the wire bends through it"
+              onClick={() => {
+                setOpen(false);
+                actions?.rerouteEdge(id, { x: labelX, y: labelY });
+              }}
+            >
+              <Icon name="reroute" /> Reroute
             </button>
           </div>
         </EdgeLabelRenderer>

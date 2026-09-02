@@ -72,6 +72,7 @@ import {
   type SceneData,
 } from "./model.js";
 import { nodeTypes } from "./nodes.jsx";
+import { isRefusal, rejoinReroute, spliceReroute } from "./reroute-ops.js"; // [U8b]
 import { Palette, type PaletteItem } from "./palette.jsx";
 // ── [U0] foundation ──
 import { useDisplayedGraph } from "./collapse-view.js";
@@ -1133,6 +1134,16 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
           setNote(`inserted ${node.data.label} on the wire`);
         });
       },
+      // [U8b] Reparent ON, so a dot dropped inside a Beat joins it exactly as a drag would.
+      rerouteEdge(edgeId, at) {
+        withCurrent((ns, es) => {
+          const out = spliceReroute(asCore(ns), asCoreEdges(es), edgeId, at, handleTypes(ns));
+          if (isRefusal(out)) return setNote(out.error);
+          settle(asRF(out.nodes), asRFEdges(out.edges));
+          setNote(`reroute on the ${out.type} wire`);
+          return undefined;
+        });
+      },
     }),
     [settle, withCurrent],
   );
@@ -1247,6 +1258,11 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         case "remove_node":
           return run((ns, es) => {
             const target = find(ns, args.id);
+            // [U8b] A reroute is a bend, not a stop: removing one rejoins the wire it sat on.
+            if (target.data.kind === "reroute") {
+              settle(ns.filter((n) => n.id !== target.id), asRFEdges(rejoinReroute(asCore(ns), asCoreEdges(es), target.id)), { reparent: false });
+              return { removed: [target.id] };
+            }
             const doomed = new Set<string>([target.id]);
             let grew = true;
             while (grew) {

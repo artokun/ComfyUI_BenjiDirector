@@ -38,6 +38,7 @@ import { FaceRow } from "./faces.jsx";
 import { ACCENT, ContainerToolbar } from "./container-toolbar.jsx";
 import { Icon } from "./icons.js";
 import { RenderBadge } from "./render-badge.jsx";
+import { RerouteNode } from "./reroute.jsx"; // [U8b]
 import {
   PORT_COLOR,
   type AssetData,
@@ -517,4 +518,5 @@ export const nodeTypes = {
   asset: AssetNode,
   groupbox: GroupNode,
   subgraph: SubgraphNode,
+  reroute: RerouteNode,
 };

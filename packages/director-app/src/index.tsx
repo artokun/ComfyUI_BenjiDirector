@@ -22,7 +22,7 @@ import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 // U6 (collapse-view.ts is imported by DirectorApp)
 // U7 import "./blueprint-modal.jsx";
 // U8a import "./selection-toolbar.jsx";
-// U8b import "./reroute.jsx";
+import "./reroute.jsx"; // U8b
 // U9 import "./note-node.jsx";
 // U10 import "./JobStrip.jsx";
 // U11 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx";

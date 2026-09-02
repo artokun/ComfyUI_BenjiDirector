@@ -74,6 +74,41 @@ function chainedFrom(sceneNodeId: string, edges: readonly GraphEdge[], order: Re
   return theirs === mine - 1;
 }
 
+/**
+ * [U8b] The same edges with every reroute dot walked THROUGH.
+ *
+ * A dot is a bend in a wire, not a thing the film contains: SC-01 → dot → SC-02 is still
+ * SC-01 feeding SC-02, and `chain_from_prev` has to say so. Each edge leaving a dot is
+ * rewritten to the source at the far end of the chain of dots, however many there are; an edge
+ * whose chain reaches nothing — a dangling dot, or dots wired in a ring — resolves to no
+ * source at all and is dropped, because it feeds nothing either.
+ */
+export function resolveThroughReroutes(
+  edges: readonly GraphEdge[],
+  nodes: readonly GraphNode<DirectorData>[],
+): readonly GraphEdge[] {
+  const dots = new Set(nodes.filter((n) => n.data.kind === "reroute").map((n) => n.id));
+  if (!dots.size) return edges;
+  const feedOf = new Map<string, GraphEdge>();
+  for (const e of edges) if (dots.has(e.target)) feedOf.set(e.target, e);
+  const resolved: GraphEdge[] = [];
+  for (const e of edges) {
+    let up: GraphEdge | undefined = e;
+    const seen = new Set<string>();
+    while (up && dots.has(up.source)) {
+      if (seen.has(up.source)) {
+        up = undefined;
+        break;
+      }
+      seen.add(up.source);
+      up = feedOf.get(up.source);
+    }
+    if (!up) continue;
+    resolved.push(up === e ? e : { ...e, source: up.source, sourceHandle: up.sourceHandle });
+  }
+  return resolved;
+}
+
 const cutOrder = (nodes: readonly GraphNode<DirectorData>[]): Map<string, number> => {
   const m = new Map<string, number>();
   for (const n of nodes) {
@@ -92,6 +127,9 @@ export function diffForCalliope(prev: Snapshot, next: Snapshot): SceneIntent[] {
   const out: SceneIntent[] = [];
   const orderNow = cutOrder(next.nodes);
   const orderWas = cutOrder(prev.nodes);
+  // [U8b] Continuity is read through any reroute dots the wire bends around.
+  const edgesNow = resolveThroughReroutes(next.edges, next.nodes);
+  const edgesWas = resolveThroughReroutes(prev.edges, prev.nodes);
 
   for (const n of next.nodes) {
     const ref = calliopeRef(n.id);
@@ -117,8 +155,8 @@ export function diffForCalliope(prev: Snapshot, next: Snapshot): SceneIntent[] {
       intent.beat_id = beatNow;
       touched = true;
     }
-    const chainNow = chainedFrom(n.id, next.edges, orderNow);
-    const chainWas = before ? chainedFrom(n.id, prev.edges, orderWas) : chainNow;
+    const chainNow = chainedFrom(n.id, edgesNow, orderNow);
+    const chainWas = before ? chainedFrom(n.id, edgesWas, orderWas) : chainNow;
     if (before && chainNow !== chainWas) {
       intent.chain_from_prev = chainNow;
       touched = true;
