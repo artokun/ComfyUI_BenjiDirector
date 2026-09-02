@@ -19,7 +19,7 @@ import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 import "./clipboard.drive.js"; import "./help.jsx"; // U3 (useEditorHotkeys is mounted by DirectorApp)
 import "./sidebar.jsx"; import "./persistence.js"; // U4
 import "./node-chrome.jsx";
-// U5 import "./container-delete.jsx";
+import "./container-delete.jsx"; // U5
 // U6 (collapse-view.ts is imported by DirectorApp)
 import "./blueprint-modal.jsx"; // U7
 import "./selection-toolbar.jsx"; // U8a
@@ -27,7 +27,7 @@ import "./selection-toolbar.jsx"; // U8a
 import "./note-node.jsx"; // U9
 import "./JobStrip.jsx"; // U10
 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
-// U12 import "./Inspector.jsx";
+import "./Inspector.jsx"; // U12
 // U13 (calliope-sync.ts is imported by DirectorApp)
 import "./AssetsPanel.jsx"; // U14
 import "./RenderPanel.jsx"; // U15
