@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { GROUP_TYPE, SUBGRAPH_TYPE, type GraphEdge, type GraphNode } from "@benjidirector/graph-core";
-import { applyTopology, captureTopology, loadTopology, saveTopology, topologyKey } from "./topology.js";
-import { beat, directorHost, scene, type BeatData, type DirectorData } from "./model.js";
+import { applyTopology, captureTopology, extrasOf, loadTopology, saveTopology, topologyKey, TOPOLOGY_VERSION } from "./topology.js";
+import { beat, directorHost, makeNode, scene, type BeatData, type DirectorData, type NoteData, type SceneData } from "./model.js";
 
 type N = GraphNode<DirectorData>;
 const chain = (a: string, b: string): GraphEdge => ({ id: `lg:${a}:out:LAST FRAME->${b}:in:IN FRAME`, source: a, target: b, sourceHandle: `${a}:out:LAST FRAME`, targetHandle: `${b}:in:IN FRAME` });
@@ -99,5 +99,74 @@ describe("topology sidecar", () => {
     (globalThis as { localStorage?: unknown }).localStorage = undefined;
     expect(() => saveTopology(1, { version: 1, beats: {} })).not.toThrow();
     expect(loadTopology(1)).toBeNull();
+  });
+});
+
+// ── v2: extras ──────────────────────────────────────────────────────────────────────────
+//
+// The same problem as a Beat's box, one level down: a note's text, a leaf's collapse / colour
+// / bypass and a reroute's type have no Calliope column, so the sidecar is where they live.
+
+describe("topology extras (v2)", () => {
+  beforeEach(() => {
+    (globalThis as { localStorage?: unknown }).localStorage = new MemoryStorage();
+  });
+
+  const plainScene = (): N => scene("cal-sc-1", "SC-01", { x: 40, y: 60 }, {}, "cal-beat-1");
+  const dressed = (): N => {
+    const s = plainScene();
+    return { ...s, data: { ...(s.data as SceneData), collapsed: true, color: "#f472b6", bypassed: true } } as N;
+  };
+
+  it("captures only what a node actually carries — a default is not state", () => {
+    expect(extrasOf(plainScene())).toBeUndefined();
+    expect(extrasOf({ ...plainScene(), data: { ...(plainScene().data as SceneData), bypassed: false, color: "" } } as N)).toBeUndefined();
+    expect(extrasOf(dressed())).toEqual({ collapsed: true, color: "#f472b6", bypassed: true });
+    // A Beat's state has its own shape; it must not be duplicated into extras.
+    expect(extrasOf(beat("cal-beat-1", "Beat 1", { x: 0, y: 0 }))).toBeUndefined();
+  });
+
+  it("round-trips a leaf's collapse / colour / bypass and a note's text onto a fresh projection", () => {
+    const note = makeNode("note", { x: 10, y: 20 }, "stamp") as N;
+    const withText = { ...note, data: { ...(note.data as NoteData), text: "beat two runs long" } } as N;
+    const topo = captureTopology([beat("cal-beat-1", "Beat 1", { x: 0, y: 0 }), dressed(), withText]);
+    expect(topo.version).toBe(TOPOLOGY_VERSION);
+    expect(topo.extras).toEqual({ "cal-sc-1": { collapsed: true, color: "#f472b6", bypassed: true }, [note.id]: { text: "beat two runs long" } });
+
+    // Calliope re-projects the scene plain; the sidecar dresses it again.
+    const back = applyTopology([beat("cal-beat-1", "Beat 1", { x: 0, y: 0 }), plainScene()], [], topo, directorHost).nodes;
+    const sc = back.find((n) => n.id === "cal-sc-1")!.data as SceneData;
+    expect([sc.collapsed, sc.color, sc.bypassed]).toEqual([true, "#f472b6", true]);
+    // The note is not in the projection at all — extras is a memory, never a source of nodes.
+    expect(back.map((n) => n.id)).toEqual(["cal-beat-1", "cal-sc-1"]);
+  });
+
+  it("never rewrites a reroute's portType — the ports were already built from it", () => {
+    const rr = makeNode("reroute", { x: 0, y: 0 }, "stamp", { portType: "image" }) as N;
+    expect(extrasOf(rr)).toEqual({ portType: "image" });
+    const topo = { version: 2 as const, beats: {}, extras: { [rr.id]: { portType: "video", collapsed: true } } };
+    const back = applyTopology([rr], [], topo, directorHost).nodes[0]!;
+    expect((back.data as { portType: string }).portType).toBe("image");
+  });
+
+  it("a v1 sidecar still loads — it simply names no extras; an unknown version does not", () => {
+    const v1 = { version: 1 as const, beats: { "cal-beat-1": { subgraph: false, position: { x: 7, y: 9 }, railLabels: {} } } };
+    saveTopology(4, v1);
+    expect(loadTopology(4)).toEqual(v1);
+    const out = applyTopology([beat("cal-beat-1", "Beat 1", { x: 0, y: 0 }), dressed()], [], v1, directorHost).nodes;
+    expect(out.find((n) => n.id === "cal-beat-1")!.position).toEqual({ x: 7, y: 9 });
+
+    (globalThis.localStorage as unknown as MemoryStorage).setItem(topologyKey(5), JSON.stringify({ version: 99, beats: {} }));
+    expect(loadTopology(5)).toBeNull();
+    // And an unknown version applies NOTHING rather than half a shape.
+    const untouched = applyTopology([dressed()], [], { version: 99 as unknown as 2, beats: {}, extras: { "cal-sc-1": { color: "#000" } } }, directorHost).nodes[0]!;
+    expect((untouched.data as SceneData).color).toBe("#f472b6");
+  });
+
+  it("survives a sidecar with a garbage extras entry", () => {
+    const topo = { version: 2 as const, beats: {}, extras: { "cal-sc-1": {} } };
+    const out = applyTopology([plainScene()], [], topo, directorHost).nodes[0]!;
+    expect((out.data as SceneData).collapsed).toBeUndefined();
+    expect(out).toBe(applyTopology([out], [], topo, directorHost).nodes[0]);
   });
 });

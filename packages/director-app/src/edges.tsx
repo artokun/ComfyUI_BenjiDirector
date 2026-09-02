@@ -8,8 +8,10 @@
 
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { canonicalEdgeId } from "./collapse-view.js";
 import { Icon } from "./icons.jsx"; // [U8b] the Reroute item
 
+/** Every action takes the CANONICAL edge id — the one in state and in `outline`. */
 export interface EdgeActions {
   deleteEdge(edgeId: string): void;
   /** Insert a scene on this wire at the given flow position, splicing it in if the types allow. */
@@ -22,6 +24,9 @@ export const EdgeActionsContext = createContext<EdgeActions | null>(null);
 export function DirectorEdge(props: EdgeProps) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, markerEnd } = props;
   const actions = useContext(EdgeActionsContext);
+  // A wire drawn to a collapsed group's proxy handle is a DISPLAYED edge (`…@display`); the
+  // menu acts on the canonical one it stands for.
+  const edgeId = canonicalEdgeId(id);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -75,7 +80,7 @@ export function DirectorEdge(props: EdgeProps) {
               type="button"
               onClick={() => {
                 setOpen(false);
-                actions?.insertOnEdge(id, { x: labelX, y: labelY });
+                actions?.insertOnEdge(edgeId, { x: labelX, y: labelY });
               }}
             >
               ＋ Insert node
@@ -85,7 +90,7 @@ export function DirectorEdge(props: EdgeProps) {
               className="is-danger"
               onClick={() => {
                 setOpen(false);
-                actions?.deleteEdge(id);
+                actions?.deleteEdge(edgeId);
               }}
             >
               ✕ Delete

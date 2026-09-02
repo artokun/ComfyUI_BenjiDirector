@@ -1,0 +1,27 @@
+/* ── U6 · group collapse ──────────────────────────────────────────────────────────────
+   A collapsed PLAIN GROUP borrows the collapsed-subgraph card wholesale — `.bd-collapsed`,
+   `.bd-collapsed-head`, `.bd-hub` — so the two read as the same thing. This file covers only
+   what a groupbox wrapper needs on top of that, and how a PROXY dot differs from a rail's.
+   Tokens only. */
+
+/* The groupbox wrapper is pointer-transparent (a box is picked up by its title, so a wire
+   crossing it stays clickable); a collapsed card is all face, so it takes the pointer back —
+   the same exception the subgraph card already has. */
+.react-flow__node-groupbox > .bd-collapsed { pointer-events: auto; }
+
+/* A collapsed GROUP is still a plain box, so its card keeps the dashed edge the expanded box
+   wears — the one glance that tells it apart from a promoted Beat's solid card. */
+.bd-collapsed.bd-collapsed-group { border-style: dashed; }
+.bd-collapsed.bd-collapsed-group.is-selected { border-style: solid; }
+
+/* A proxy stands in for a hidden child's port. It is drawn like a hub dot but cannot start or
+   take a wire — the port it fronts is the one to wire, once the group is expanded — so it
+   carries no connect affordance, and a faint halo says "this is a stand-in". */
+.bd-collapsed .react-flow__handle.bd-hub.is-proxy {
+  cursor: default;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4), 0 0 0 3px var(--bd-line-soft);
+}
+
+/* The caret in an expanded group's title, mirroring the subgraph's. */
+.bd-group-title .bd-caret { display: inline-flex; align-items: center; margin-left: -0.15rem; }
+.bd-collapsed-head .bd-caret { display: inline-flex; align-items: center; }
