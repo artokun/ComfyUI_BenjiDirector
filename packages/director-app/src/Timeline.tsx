@@ -54,7 +54,7 @@ interface Prefs {
   open: boolean;
   pps: number | null; // null = fit the film to the track
 }
-const DEFAULT_PREFS: Prefs = { height: 168, open: true, pps: null };
+const DEFAULT_PREFS: Prefs = { height: 208, open: true, pps: null };
 
 function readPrefs(): Prefs {
   try {
@@ -153,9 +153,9 @@ export function TimelineDock() {
     return () => ro.disconnect();
   }, [prefs.open]);
 
-  const fitPps = model.duration > 0 ? Math.max(MIN_PPS, (trackWidth - 24) / model.duration) : 12;
+  const fitPps = model.duration > 0 ? Math.max(MIN_PPS, (trackWidth - GUTTER - 24) / model.duration) : 12;
   const pps = Math.min(MAX_PPS, Math.max(MIN_PPS, prefs.pps ?? fitPps));
-  const canvasWidth = Math.max(trackWidth, model.duration * pps + 24);
+  const canvasWidth = Math.max(trackWidth - GUTTER, model.duration * pps + 24);
 
   // ── edits ───────────────────────────────────────────────────────────────────────────────
 
@@ -273,7 +273,7 @@ export function TimelineDock() {
     (e: React.PointerEvent) => {
       const el = scrollRef.current;
       if (!el) return;
-      const x = e.clientX - el.getBoundingClientRect().left + el.scrollLeft;
+      const x = e.clientX - el.getBoundingClientRect().left - GUTTER + el.scrollLeft;
       setPlayhead(Math.max(0, Math.min(model.duration, x / pps)));
     },
     [model.duration, pps],
@@ -329,15 +329,18 @@ export function TimelineDock() {
         </button>
       </header>
 
-      <div className="bd-tl-body">
-        <div className="bd-tl-gutter" style={{ width: GUTTER }}>
-          <div className="bd-tl-rulerpad" style={{ height: RULER_H }} />
-          {model.rows.map((row) => (
-            <RowHead key={row.id} row={row} selected={!!row.nodeId && selectedNodeIds.includes(row.nodeId)} onSelect={row.nodeId ? () => select(row.nodeId as string, false) : undefined} />
-          ))}
-        </div>
+      {/* ONE scroller. The gutter is sticky inside it rather than a second scrolling column:
+          two scrollers would keep their own scrollTop, and the moment a film had more rows than
+          the dock is tall the labels would stop lining up with the rows they name. */}
+      <div className="bd-tl-body" ref={scrollRef}>
+        <div className="bd-tl-inner">
+          <div className="bd-tl-gutter" style={{ width: GUTTER }}>
+            <div className="bd-tl-rulerpad" style={{ height: RULER_H }} />
+            {model.rows.map((row) => (
+              <RowHead key={row.id} row={row} selected={!!row.nodeId && selectedNodeIds.includes(row.nodeId)} onSelect={row.nodeId ? () => select(row.nodeId as string, false) : undefined} />
+            ))}
+          </div>
 
-        <div className="bd-tl-scroll" ref={scrollRef}>
           <div className="bd-tl-canvas" style={{ width: canvasWidth, height: RULER_H + model.rows.length * ROW_H }}>
             <div className="bd-tl-ruler" style={{ height: RULER_H }} onPointerDown={scrub} onPointerMove={(e) => e.buttons === 1 && scrub(e)}>
               {ticks.map((t) => (

@@ -50,6 +50,37 @@ test("the sheet is the film: a master track, and a shorter one per Beat", async 
   await shot(page, "u21-timeline");
 });
 
+test("the row labels stay with their rows when the sheet is scrolled", async ({ page }) => {
+  // A short dock, so three rows do not fit and the sheet has to scroll. The gutter and the
+  // track are ONE scroller; two would keep their own scrollTop and the labels would drift off
+  // the rows they name the moment a film had more Beats than the dock is tall.
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("benjidirector/timeline", JSON.stringify({ height: 100, open: true, pps: null }));
+    } catch {
+      /* the assertion below fails loudly if the seed did not take */
+    }
+  });
+  await waitForDemo(page);
+
+  const mid = async (sel: string) => {
+    const b = await page.locator(sel).boundingBox();
+    if (!b) throw new Error(`no box for ${sel}`);
+    return b.y + b.height / 2;
+  };
+  const body = page.locator(".bd-tl-body");
+  await expect(body).toBeVisible();
+  const scrolled = await body.evaluate((el) => {
+    el.scrollTop = 60;
+    return el.scrollTop;
+  });
+  expect(scrolled, "the sheet actually scrolls at this height").toBeGreaterThan(0);
+
+  for (const row of ["film", "beat-1", "loose"]) {
+    expect(Math.abs((await mid(`[data-rowhead="${row}"]`)) - (await mid(`.bd-tl-row[data-row="${row}"]`))), `${row} label sits on its row`).toBeLessThan(2);
+  }
+});
+
 test("clicking a clip selects its node, and the canvas selection lights the clip", async ({ page }) => {
   await waitForDemo(page);
   const first = page.locator('.bd-tl-row[data-row="film"] .bd-tl-clip[data-clip="sc-02"]');

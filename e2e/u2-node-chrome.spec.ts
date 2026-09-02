@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { drive, shot, waitForDemo } from "./helpers.js";
 
+// The demo's SC-03 sits far to the right, and with the dopesheet open the fitted layout puts
+// it past the canvas edge. These cases are about a card's own chrome, so they take the whole
+// canvas — the same switch the dock's caret flips.
+
 // U2 — leaf-node toolbar & chrome, driven through the real DOM: select a scene, use its
 // toolbar (TYPE · colour · pin · bypass · delete), collapse it to its header by the chevron,
 // rename it in place, and confirm the agent's commands see the same state.
@@ -23,7 +27,7 @@ async function edgeStart(page: Page, edgeId: string): Promise<{ x: number; y: nu
 }
 
 test("a selected scene shows TYPE, colour, bypass and delete — the pin only inside a subgraph", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   await node(page, "sc-01").locator(".bd-node-title").click();
   await expect(bar(page)).toBeVisible();
   await expect(tb(page, "type")).toHaveText("SCENE");
@@ -45,7 +49,7 @@ test("a selected scene shows TYPE, colour, bypass and delete — the pin only in
 });
 
 test("bypass fades the card and read_node reports it; a colour tints the header", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   await node(page, "sc-01").locator(".bd-node-title").click();
   await tb(page, "bypass").click();
   const card = node(page, "sc-01").locator(".bd-node");
@@ -79,7 +83,7 @@ test("bypass fades the card and read_node reports it; a colour tints the header"
 });
 
 test("the chevron collapses a scene to its header: wires stay, handles sit on the header", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   const edgesBefore = await page.locator(".react-flow__edge").count();
   const lastFrame = 'lg:sc-01:out:LAST FRAME->sc-02:in:IN FRAME';
   const startBefore = await edgeStart(page, lastFrame);
@@ -115,7 +119,7 @@ test("the chevron collapses a scene to its header: wires stay, handles sit on th
 });
 
 test("double-click renames a scene in place; the (i) shows its facts on hover", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   const title = node(page, "sc-01").locator(".bd-title-text");
   await title.dblclick();
   const input = node(page, "sc-01").locator(".bd-title-input");
@@ -135,7 +139,7 @@ test("double-click renames a scene in place; the (i) shows its facts on hover", 
 });
 
 test("delete: an unwired node goes at once, a wired one asks first", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   const { id } = await drive<{ id: string }>(page, "add_node", { kind: "item", x: 900, y: 60, label: "Prop" });
   await node(page, id).locator(".bd-node-title").click();
   await expect(tb(page, "type")).toHaveText("ITEM");
@@ -154,7 +158,7 @@ test("delete: an unwired node goes at once, a wired one asks first", async ({ pa
 });
 
 test("collapsing a leaf INSIDE a promoted Beat leaves the Beat's rails alone", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   // sc-02 lives in beat-1 and its LAST FRAME crosses the boundary to sc-03, so promoting the
   // Beat derives exactly one output rail. Collapsing sc-02 moves that wire's endpoint onto the
   // scene's header; the rail is derived from EDGES, so it must survive untouched.
@@ -179,7 +183,7 @@ test("collapsing a leaf INSIDE a promoted Beat leaves the Beat's rails alone", a
 });
 
 test("the swatch's no-tint clears a colour the same way the agent does", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   await drive(page, "set_node_color", { id: "sc-01", color: "#34d399" });
   await node(page, "sc-01").locator(".bd-node-title").click();
   await tb(page, "color").click();
@@ -191,7 +195,7 @@ test("the swatch's no-tint clears a colour the same way the agent does", async (
 });
 
 test("the look: toolbar on a tinted collapsed scene, a bypassed scene beside it", async ({ page }) => {
-  await waitForDemo(page);
+  await waitForDemo(page, { timeline: false });
   await drive(page, "set_node_color", { id: "sc-01", color: "#34d399" });
   await drive(page, "set_node_collapsed", { id: "sc-01", collapsed: true });
   await drive(page, "set_bypassed", { id: "sc-03", bypassed: true });

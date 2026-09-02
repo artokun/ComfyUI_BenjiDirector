@@ -88,21 +88,38 @@
   color: var(--bd-accent);
 }
 
+/* ONE scroller for the whole sheet. The gutter is sticky INSIDE it, so a vertical scroll moves
+   the labels with their rows and a horizontal one leaves them pinned. Two scrollers would each
+   keep their own scrollTop and desync the moment a film has more Beats than the dock is tall. */
 .bd-tl-body {
-  display: flex;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
+}
+.bd-tl-inner {
+  display: flex;
+  align-items: flex-start;
+  width: max-content;
+  min-width: 100%;
 }
 
-/* ── the sticky left column of row names ── */
 .bd-tl-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 4;
   flex: none;
   border-right: 1px solid var(--bd-line);
   background: var(--bd-bg);
-  overflow: hidden;
 }
-.bd-tl-rulerpad { border-bottom: 1px solid var(--bd-line-soft); }
+/* The ruler pad is the one cell that has to hold BOTH corners: pinned left with the gutter and
+   pinned top with the ruler, or the first row's label slides under the ticks. */
+.bd-tl-rulerpad {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bd-bg);
+  border-bottom: 1px solid var(--bd-line-soft);
+}
 
 .bd-tl-rowhead {
   display: flex;
@@ -137,12 +154,10 @@ button.bd-tl-rowhead:hover { background: var(--bd-fill-3); color: var(--bd-text)
 }
 
 /* ── the track ── */
-.bd-tl-scroll {
-  flex: 1;
-  min-width: 0;
-  overflow: auto;
+.bd-tl-canvas {
+  position: relative;
+  flex: none;
 }
-.bd-tl-canvas { position: relative; }
 
 .bd-tl-ruler {
   position: sticky;
