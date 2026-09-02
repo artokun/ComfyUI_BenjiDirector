@@ -29,7 +29,7 @@ import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
 // U12 import "./Inspector.jsx";
 // U13 (calliope-sync.ts is imported by DirectorApp)
 import "./AssetsPanel.jsx"; // U14
-// U15 import "./RenderPanel.jsx";
+import "./RenderPanel.jsx"; // U15
 import "./WorkflowsPanel.jsx"; // U16
 import "./QueuePanel.jsx"; // U17
 import "./PlaygroundPanel.jsx"; // U18
