@@ -218,7 +218,10 @@ test("Workflows tab says so when Calliope is down, and the hint block names the 
   const panel = page.locator('[data-u16="panel"]');
   await expect(panel).toContainText("Calliope is not answering");
   await expect(panel).toContainText("Display Name (Input:role)");
-  await expect(panel).toContainText("panel_director_workflow register");
+  // The hint DESCRIBES the capability; it does not print a tool name. The panel's vocabulary
+  // gate scans the vendored bundle and only knows PUBLISHED names.
+  await expect(panel).toContainText("register the canvas workflow");
+  await expect(panel).not.toContainText("panel_director");
   for (const role of ["prompt", "negative", "character", "location", "image", "video", "audio", "seed", "width", "height", "duration"]) {
     await expect(panel.locator(".u16-role-row b", { hasText: new RegExp(`^${role}`) })).toHaveCount(1);
   }

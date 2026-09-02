@@ -328,7 +328,7 @@ function RenderPanel() {
   const batch = useMemo(() => batchTargets(scenes, jobs), [jobs, scenes]);
   const generateAll = async () => {
     if (projectId === null || !batch.targets.length || busy) return;
-    if (batch.mode === "regenerate") {
+    if (batch.mode === "redo-all") {
       const ok = await modal.confirm({
         title: `Regenerate ${batch.targets.length} clip${batch.targets.length === 1 ? "" : "s"}?`,
         body: "Every scene's existing clip is cleared as its job is queued, and the queue renders them one at a time.",

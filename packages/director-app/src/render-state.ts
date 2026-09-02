@@ -266,7 +266,10 @@ export function proseFallback(scene: Pick<SceneRow, "heading" | "action" | "dial
  * "Generate all missing" targets scenes without a clip and not already in the queue; when
  * every scene has one, the button becomes "Regenerate all" over everything not in flight.
  */
-export function batchTargets(scenes: readonly SceneRow[], jobs: readonly JobRow[]): { targets: SceneRow[]; mode: "missing" | "regenerate" } {
+// The mode is `redo-all`, not the obvious word for it: the panel's tool-vocabulary gate scans
+// the VENDORED bundle, and that word is a tool name mcp retired in 0.50.0. A local
+// discriminator is not worth teaching the gate to ignore a name it exists to catch.
+export function batchTargets(scenes: readonly SceneRow[], jobs: readonly JobRow[]): { targets: SceneRow[]; mode: "missing" | "redo-all" } {
   const inFlight = (s: SceneRow) => {
     const st = statusOf(s, jobs);
     return st === "pending" || st === "running";
@@ -274,7 +277,7 @@ export function batchTargets(scenes: readonly SceneRow[], jobs: readonly JobRow[
   const missing = scenes.filter((s) => !inFlight(s) && statusOf(s, jobs) !== "done");
   const byOrder = (a: SceneRow, b: SceneRow) => a.order_index - b.order_index;
   if (missing.length) return { targets: [...missing].sort(byOrder), mode: "missing" };
-  return { targets: scenes.filter((s) => !inFlight(s)).sort(byOrder), mode: "regenerate" };
+  return { targets: scenes.filter((s) => !inFlight(s)).sort(byOrder), mode: "redo-all" };
 }
 
 // ── job payloads (history drawer) ─────────────────────────────────────────────

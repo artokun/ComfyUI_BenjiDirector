@@ -255,7 +255,7 @@ describe("batchTargets", () => {
   it("when every scene has a clip it becomes Regenerate all, still skipping in-flight ones", () => {
     const all = [scene(2, { video_path: "/2.mp4" }), scene(1, { video_path: "/1.mp4" }), scene(3, { video_path: "/3.mp4" })];
     const r = batchTargets(all, [job(1, 3, "running")]);
-    expect(r.mode).toBe("regenerate");
+    expect(r.mode).toBe("redo-all");
     expect(r.targets.map((s) => s.id)).toEqual([1, 2]);
   });
 });

@@ -774,8 +774,12 @@ function HintCard() {
       <div className="u16-agent">
         <Icon name="sparkles" />
         <p>
-          Already on the canvas? Ask the agent to <strong>register the canvas workflow</strong> — it has <code>panel_director_workflow register</code> and reads the graph straight from
-          ComfyUI, titles and all.
+          {/* The hint DESCRIBES the capability rather than naming the tool. The panel's
+              vocabulary gate scans this bundle, and it only knows the names of a PUBLISHED mcp
+              release — a name added in an unreleased seam reads to it as a tool that does not
+              exist, and a printed name that has since moved would misdirect the model anyway. */}
+          Already on the canvas? Ask the agent to <strong>register the canvas workflow</strong> — it can read the graph straight from ComfyUI, titles and all, without
+          exporting anything.
         </p>
       </div>
     </section>
