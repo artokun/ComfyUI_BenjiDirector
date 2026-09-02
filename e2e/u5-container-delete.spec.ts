@@ -68,7 +68,7 @@ test("toolbar trash asks; 'Delete only the Beat' lifts the scenes out in place; 
   await expect(page.locator(".bd-note")).toContainText("left where they stood");
 
   // ── undo puts the Beat back around them ──
-  await page.locator(".bd-toolbar button", { hasText: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(page.locator('.react-flow__node[data-id="beat-1"]')).toBeVisible();
   outline = await drive<Outline>(page, "outline");
   for (const id of ["sc-01", "sc-02"] as const) {
@@ -143,7 +143,7 @@ test("the agent's delete_container has both modes and refuses a leaf", async ({ 
   expect(await absolute(page, "sc-02")).toEqual(before);
   await expect(page.locator(".react-flow__node")).toHaveCount(5);
 
-  await page.locator(".bd-toolbar button", { hasText: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(page.locator('.react-flow__node[data-id="beat-1"]')).toBeVisible();
   const all = await drive<{ removed: string[] }>(page, "delete_container", { id: "beat-1", mode: "all" });
   expect(all.removed.sort()).toEqual(["beat-1", "sc-01", "sc-02"]);
@@ -169,8 +169,11 @@ test("right-click on a Beat's body opens the palette at the cursor; a picked Sce
   await expect(palette).toBeVisible();
   const pb = await palette.boundingBox();
   if (!pb) throw new Error("no palette box");
-  expect(Math.abs(pb.x - x), "palette x at the cursor").toBeLessThan(8);
-  expect(Math.abs(pb.y - y), "palette y at the cursor").toBeLessThan(8);
+  // "At the cursor", not "at a fixed corner" — a menu's own padding and shadow move its box a
+  // few pixels, and a design pass changes that number. The tolerance has to be looser than the
+  // chrome or it pins the styling instead of the placement.
+  expect(Math.abs(pb.x - x), "palette x at the cursor").toBeLessThan(16);
+  expect(Math.abs(pb.y - y), "palette y at the cursor").toBeLessThan(16);
   await shot(page, "u5-container-delete-context");
 
   await palette.locator(".bd-palette-item", { hasText: "Scene" }).click();
