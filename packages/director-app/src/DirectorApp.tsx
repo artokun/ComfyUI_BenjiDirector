@@ -15,6 +15,7 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode, // [U8a]
   getBezierPath,
   useEdgesState,
   useNodesState,
@@ -81,6 +82,8 @@ import { Icon } from "./icons.jsx";
 import { ModalProvider } from "./modal.jsx";
 import { summarizeEdge, summarizeNode } from "./outline.js";
 import { usePanels } from "./panels.js";
+import { DirectorMiniMap } from "./selection-toolbar.jsx"; // [U8a]
+import { MULTI_SELECT_KEYS, useSnapToGrid } from "./selection-model.js"; // [U8a]
 import { Slot } from "./slots.jsx";
 import { PALETTE_KINDS } from "./model.js";
 
@@ -1639,8 +1642,12 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                 edges={displayedEdges}
                 onSelectionChange={onSelectionChange}
                 elevateNodesOnSelect={true /* [U1] false + zIndex convention */}
-                snapToGrid={false /* [U8a] */}
-                snapGrid={[18, 18]}
+                snapToGrid={useSnapToGrid() /* [U8a] the toolbar's Snap switch. A hook, called unconditionally in a props list that is built on every render. */}
+                snapGrid={[18, 18] /* [U8a] the Background's own gap */}
+                selectionOnDrag={true /* [U8a] left-drag on the pane draws a marquee */}
+                panOnDrag={[1, 2] /* [U8a] middle and right drag pan; right-click alone still opens the palette */}
+                selectionMode={SelectionMode.Partial /* [U8a] brushing a node picks it up */}
+                multiSelectionKeyCode={MULTI_SELECT_KEYS /* [U8a] */}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeDragStart={onNodeDragStart}
@@ -1665,7 +1672,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
               >
                 <Background gap={18} size={1} color="#2a2a35" />
                 <Controls showInteractive={false} />
-                {/* [U8a] <MiniMap /> */}
+                <DirectorMiniMap /> {/* [U8a] */}
               </ReactFlow>
               <Slot name="canvas-overlay" />
               {activeTab ? (
