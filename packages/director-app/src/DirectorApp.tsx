@@ -1587,21 +1587,6 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
               <Slot name="toolbar-left" />
               <span className="bd-spacer" />
               <Slot name="toolbar-right" />
-              {status?.reachable ? (
-                <select
-                  className="bd-project"
-                  value={loadedProject ?? ""}
-                  title="Which Calliope project the canvas shows"
-                  onChange={(e) => void loadProject(e.target.value === "" ? null : Number(e.target.value))}
-                >
-                  <option value="">demo project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
               {loadedProject !== null ? (
                 <span className={`bd-sync is-${syncState}`} title="Write-back to Calliope">
                   {syncState === "saving" ? "saving…" : syncState === "saved" ? "saved" : syncState === "error" ? "save failed" : "synced"}
