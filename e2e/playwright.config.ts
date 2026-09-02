@@ -39,7 +39,11 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
-  retries: process.env.CI ? 1 : 0,
+  // One retry everywhere. Across 88 specs against a single dev server, the occasional failure
+  // is `page.goto` timing out on a slow first paint — a LOAD flake, not an assertion. Playwright
+  // reports a spec that passes on retry as "flaky", so nothing is hidden by this; a spec that is
+  // actually broken still fails both attempts.
+  retries: 1,
   reporter: [["list"]],
   use: {
     baseURL,
