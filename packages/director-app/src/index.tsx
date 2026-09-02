@@ -21,7 +21,7 @@ import "./clipboard.drive.js"; import "./help.jsx"; // U3 (useEditorHotkeys is m
 // U5 import "./container-delete.jsx";
 // U6 (collapse-view.ts is imported by DirectorApp)
 import "./blueprint-modal.jsx"; // U7
-// U8a import "./selection-toolbar.jsx";
+import "./selection-toolbar.jsx"; // U8a
 // U8b import "./reroute.jsx";
 // U9 import "./note-node.jsx";
 import "./JobStrip.jsx"; // U10

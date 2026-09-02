@@ -1,0 +1,167 @@
+/* U8a — the floating selection pill, the snap switch, the minimap.
+ *
+ * The pill is the one piece of chrome that appears over the canvas unasked, so it is built to
+ * feel weightless: a glass capsule with a hairline and a soft lift, the way a floating
+ * mini-toolbar reads on a plush, rounded page. Tokens only — it follows the theme.
+ */
+
+.bd-selpill {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px 5px 12px;
+  border-radius: var(--bd-r-pill);
+  background: var(--bd-glass);
+  border: 1px solid var(--bd-line-2);
+  box-shadow: var(--bd-shadow-float), var(--bd-hairline);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  animation: bd-selpill-in var(--bd-dur-slow) var(--bd-ease);
+}
+
+@keyframes bd-selpill-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.bd-selpill-count {
+  color: var(--bd-dim);
+  font: 600 var(--bd-fs-xs) / 1 var(--bd-font-mono);
+  letter-spacing: var(--bd-track-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.bd-selpill-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--bd-line-2);
+}
+
+.bd-selpill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--bd-r-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--bd-text-node);
+  font: 500 var(--bd-fs-sm) / 1 var(--bd-font);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
+}
+.bd-selpill-btn:hover {
+  background: var(--bd-raised);
+  border-color: var(--bd-line);
+  color: var(--bd-text);
+}
+.bd-selpill-btn:active {
+  transform: translateY(1px);
+}
+.bd-selpill-btn.is-primary {
+  background: var(--bd-raised);
+  border-color: var(--bd-line);
+}
+.bd-selpill-btn.is-primary:hover {
+  border-color: var(--bd-accent);
+  color: var(--bd-text);
+}
+.bd-selpill-btn .bd-icon {
+  color: var(--bd-dim);
+}
+.bd-selpill-btn:hover .bd-icon,
+.bd-selpill-btn.is-primary .bd-icon {
+  color: var(--bd-accent);
+}
+
+/* ── the toolbar pair ─────────────────────────────────────────────────────────────────── */
+
+.bd-toolbar .bd-snap-toggle,
+.bd-toolbar .bd-snap-toggle + button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.bd-toolbar .bd-snap-toggle.is-on {
+  border-color: var(--bd-accent);
+  color: var(--bd-text);
+  background: color-mix(in srgb, var(--bd-raised) 78%, var(--bd-accent));
+}
+.bd-toolbar .bd-snap-toggle.is-on .bd-icon {
+  color: var(--bd-accent);
+}
+
+/* ── minimap ──────────────────────────────────────────────────────────────────────────── */
+
+.bd-root .react-flow__minimap.bd-minimap {
+  background: var(--bd-glass);
+  border: 1px solid var(--bd-line-2);
+  border-radius: var(--bd-r-md);
+  box-shadow: var(--bd-shadow), var(--bd-hairline);
+  overflow: hidden;
+  margin: 12px;
+  width: 190px;
+  height: 128px;
+}
+/* The mask is everything OUTSIDE the current viewport, so it is the scrim, not the surface. */
+.bd-root .react-flow__minimap.bd-minimap .react-flow__minimap-mask {
+  fill: var(--bd-scrim);
+  stroke: var(--bd-line-2);
+  stroke-width: 1;
+}
+
+/* Node colour by kind — scene blue, asset amber, beat violet. `minimapNodeClass()` picks the
+ * class (and is unit-tested); the token lives here so a theme change reaches the minimap. */
+.bd-root .bd-minimap .react-flow__minimap-node {
+  fill: var(--bd-neutral);
+  stroke: none;
+}
+.bd-root .bd-minimap .react-flow__minimap-node.bd-mm-scene {
+  fill: var(--bd-accent-2);
+}
+.bd-root .bd-minimap .react-flow__minimap-node.bd-mm-asset {
+  fill: var(--bd-warn);
+}
+.bd-root .bd-minimap .react-flow__minimap-node.bd-mm-beat {
+  fill: color-mix(in srgb, var(--bd-accent-3) 42%, transparent);
+  stroke: var(--bd-accent-3);
+  stroke-width: 2;
+}
+.bd-root .bd-minimap .react-flow__minimap-node.bd-mm-note {
+  fill: var(--bd-pin);
+}
+.bd-root .bd-minimap .react-flow__minimap-node.bd-mm-reroute {
+  fill: var(--bd-dim);
+}
+.bd-root .bd-minimap .react-flow__minimap-node.selected {
+  stroke: var(--bd-text);
+  stroke-width: 3;
+}
+
+/* ── marquee ──────────────────────────────────────────────────────────────────────────── */
+
+.bd-root .react-flow__selection {
+  background: color-mix(in srgb, var(--bd-accent) 12%, transparent);
+  border: 1px solid var(--bd-accent);
+  border-radius: var(--bd-r-sm);
+}
+.bd-root .react-flow__nodesselection-rect {
+  background: transparent;
+  border: 1px dashed var(--bd-line-2);
+  border-radius: var(--bd-r-sm);
+}
