@@ -23,7 +23,7 @@ import "./container-delete.jsx"; // U5
 // U6 (collapse-view.ts is imported by DirectorApp)
 import "./blueprint-modal.jsx"; // U7
 import "./selection-toolbar.jsx"; // U8a
-// U8b import "./reroute.jsx";
+import "./reroute.jsx"; // U8b
 import "./note-node.jsx"; // U9
 import "./JobStrip.jsx"; // U10
 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11

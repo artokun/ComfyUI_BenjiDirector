@@ -44,6 +44,7 @@ import { LeafResizeGrip } from "./leaf-resize.jsx"; // [U1]
 import { RenderBadge } from "./render-badge.jsx";
 import { BYPASS_TITLE, headerHandleLayout, leafClassName, leafStyle } from "./node-chrome.js";
 import { LeafCaret, LeafHub, LeafInfo, LeafToolbar, useLeafInternals } from "./node-chrome.jsx";
+import { RerouteNode } from "./reroute.jsx"; // [U8b]
 import {
   PORT_COLOR,
   type AssetData,
@@ -647,4 +648,5 @@ export const nodeTypes = {
   groupbox: GroupNode,
   subgraph: SubgraphNode,
   note: NoteNode,
+  reroute: RerouteNode,
 };

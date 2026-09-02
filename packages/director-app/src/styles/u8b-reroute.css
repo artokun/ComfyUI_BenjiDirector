@@ -1,0 +1,148 @@
+/* U8b — the reroute dot.
+ *
+ * Drawn as a point on the wire, not a card: one 14px bead in the wire's own colour, lit from
+ * the top-left and ringed by the canvas so a wire passing behind it never muddies the edge.
+ * `--bd-reroute-color` is set inline from PORT_COLOR by the node; everything else is a token.
+ *
+ * The two handles are transparent and live on the bead's left and right edges — the wire
+ * arrives at the rim rather than at the centre, so there is no wire drawn under the bead — and
+ * the middle stays free to drag. `::before` widens the grab area without widening the drawing.
+ */
+
+.bd-reroute {
+  position: relative;
+  /* --bd-reroute-size is set inline from REROUTE_SIZE, the same number the node is sized and
+     the drop position is centred with. The fallback only matters if that ever stops arriving. */
+  width: var(--bd-reroute-size, 14px);
+  height: var(--bd-reroute-size, 14px);
+  display: grid;
+  place-items: center;
+}
+
+/* The grab ring: invisible, sits UNDER the bead and the handles, makes a 14px target feel
+   like a 28px one. */
+.bd-reroute::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: var(--bd-r-pill);
+  z-index: 0;
+}
+
+.bd-reroute-dot {
+  position: relative;
+  z-index: 1;
+  width: var(--bd-reroute-size, 14px);
+  height: var(--bd-reroute-size, 14px);
+  border-radius: var(--bd-r-pill);
+  background:
+    radial-gradient(circle at 34% 28%, color-mix(in srgb, var(--bd-reroute-color) 55%, #fff), var(--bd-reroute-color) 62%);
+  box-shadow:
+    0 0 0 2px var(--bd-bg-2),
+    0 0 10px color-mix(in srgb, var(--bd-reroute-color) 45%, transparent),
+    var(--bd-hairline);
+  pointer-events: none;
+  transition: transform var(--bd-dur) var(--bd-ease), box-shadow var(--bd-dur) var(--bd-ease);
+}
+
+.bd-reroute:hover .bd-reroute-dot {
+  transform: scale(1.22);
+  box-shadow:
+    0 0 0 2px var(--bd-bg-2),
+    0 0 14px color-mix(in srgb, var(--bd-reroute-color) 70%, transparent),
+    var(--bd-hairline);
+}
+
+.bd-reroute.is-selected .bd-reroute-dot {
+  box-shadow:
+    0 0 0 2px var(--bd-bg-2),
+    0 0 0 3.5px var(--bd-accent),
+    0 0 16px color-mix(in srgb, var(--bd-accent) 45%, transparent);
+}
+
+/* What it carries, on hover. A dot with no label is only honest if the type is one look away. */
+.bd-reroute-type {
+  position: absolute;
+  /* Clear of the × at the bead's top-right corner, which is 11px out and 15px tall. */
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%) translateY(3px);
+  z-index: 3;
+  padding: 1px 5px;
+  border-radius: var(--bd-r-sm);
+  border: 1px solid var(--bd-line-2);
+  background: var(--bd-glass);
+  color: color-mix(in srgb, var(--bd-reroute-color) 70%, var(--bd-text));
+  font-family: var(--bd-font-mono);
+  font-size: var(--bd-fs-3xs);
+  letter-spacing: var(--bd-track-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--bd-dur) var(--bd-ease), transform var(--bd-dur) var(--bd-ease);
+}
+.bd-reroute:hover .bd-reroute-type,
+.bd-reroute.is-selected .bd-reroute-type {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* The remove control. Present only on hover, so a canvas of dots stays a canvas of dots. */
+.bd-reroute-x {
+  position: absolute;
+  z-index: 4;
+  top: -11px;
+  right: -11px;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: var(--bd-r-pill);
+  border: 1px solid var(--bd-line-2);
+  background: var(--bd-panel);
+  color: var(--bd-dim);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
+}
+.bd-reroute:hover .bd-reroute-x,
+.bd-reroute.is-selected .bd-reroute-x {
+  opacity: 1;
+  pointer-events: all;
+}
+.bd-reroute-x:hover {
+  color: var(--bd-bad);
+  border-color: var(--bd-bad);
+}
+
+/* The handles. Transparent and rim-mounted; React Flow keeps its own left/right placement, so
+   only the appearance is overridden here — and the hover rule has to restore the horizontal
+   half-offset the shared stylesheet drops. */
+.bd-root .bd-reroute .react-flow__handle {
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--bd-r-pill);
+}
+.bd-root .bd-reroute .react-flow__handle.react-flow__handle-left:hover {
+  transform: translate(-50%, -50%) scale(1.35);
+}
+.bd-root .bd-reroute .react-flow__handle.react-flow__handle-right:hover {
+  transform: translate(50%, -50%) scale(1.35);
+}
+/* Mid-connection, React Flow marks every landable handle — say so on the bead itself, since
+   the handles have nothing of their own to light up. */
+.bd-root .bd-reroute:has(.react-flow__handle.connectingfrom) .bd-reroute-dot,
+.bd-root .bd-reroute:has(.react-flow__handle.connectionindicator:hover) .bd-reroute-dot {
+  box-shadow:
+    0 0 0 2px var(--bd-bg-2),
+    0 0 0 3px color-mix(in srgb, var(--bd-reroute-color) 60%, transparent),
+    0 0 18px color-mix(in srgb, var(--bd-reroute-color) 65%, transparent);
+}
