@@ -1,5 +1,5 @@
 import { expect, test, type Route } from "@playwright/test";
-import { shot, waitForDemo } from "./helpers.js";
+import { drive, shot, waitForDemo } from "./helpers.js";
 
 // U10 — live events, the job strip and the scene render badge, against a mocked Calliope.
 //
@@ -121,10 +121,9 @@ test("the job strip and the scene badge follow a render from running to rendered
   // The demo graph has no queue, so the strip is not there yet.
   await expect(page.getByTestId("u10-jobstrip")).toHaveCount(0);
 
-  // Calliope answers, so the project picker appears; loading the project starts the store.
-  const picker = page.locator("select.bd-project");
-  await expect(picker).toBeVisible();
-  await picker.selectOption("1");
+  // Calliope answers, so loading the project starts the store. U11 replaced the toolbar's
+  // project <select> with a menu, so load through the editor rather than a specific widget.
+  await drive(page, "project_open", { project_id: 1 });
 
   // ── from the POLL alone: one running video job on scene 1 ──
   const strip = page.getByTestId("u10-jobstrip");
@@ -189,7 +188,7 @@ test("a paused queue offers Resume, and a failed job offers Retry", async ({ pag
   });
 
   await waitForDemo(page);
-  await page.locator("select.bd-project").selectOption("1");
+  await drive(page, "project_open", { project_id: 1 });
 
   // The failure is reported with the job's own label and Calliope's error text.
   const err = page.getByTestId("u10-error");
