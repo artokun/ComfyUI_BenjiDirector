@@ -17,8 +17,9 @@
 // twice. Node ids embed the Calliope id (`cal-sc-12`) so a write-back can find its row.
 
 import type { GraphEdge } from "@benjidirector/graph-core";
-import type { SceneRow, StoryBundle } from "@benjidirector/calliope-client";
-import { asset, beat, scene, type DirectorNode } from "./model.js";
+import type { JobRow, SceneRow, StoryBundle } from "@benjidirector/calliope-client";
+import { jobsStateFrom, renderStatusOf } from "./live.js";
+import { asset, beat, scene, type AssetData, type DirectorNode } from "./model.js";
 
 export const CAL_PREFIX = { scene: "cal-sc-", beat: "cal-beat-", character: "cal-char-", location: "cal-loc-", item: "cal-item-" } as const;
 
@@ -44,6 +45,8 @@ export function calliopeRef(nodeId: string): { kind: keyof typeof CAL_PREFIX; id
 export interface CalliopeProjectData {
   story: StoryBundle;
   scenes: SceneRow[];
+  /** When given, each scene's `renderStatus` is stamped from its latest video job (see `live.ts`). */
+  jobs?: JobRow[];
 }
 
 interface DirectorSceneSettings {
@@ -70,6 +73,9 @@ const SCENE_MIN_H = 60;
 /** A relative y above this would put the card on the Beat's title bar. */
 const SCENE_TOP_MIN = 30;
 
+/** [U14] Carry the row's sheet / reference image onto the node, so the card can show it. */
+const withImage = (n: DirectorNode, path: unknown): DirectorNode => ({ ...n, data: { ...(n.data as AssetData), imagePath: typeof path === "string" && path ? path : null } });
+
 const link = (source: string, sourceHandle: string, target: string, targetHandle: string): GraphEdge => ({
   id: `lg:${sourceHandle}->${targetHandle}`,
   source,
@@ -82,19 +88,20 @@ export function projectToGraph(data: CalliopeProjectData): { nodes: DirectorNode
   const nodes: DirectorNode[] = [];
   const edges: GraphEdge[] = [];
   const { story } = data;
+  const jobsState = data.jobs ? jobsStateFrom(data.jobs) : null;
 
   // ── assets down the left ──
   let ay = 60;
   for (const c of story.characters) {
-    nodes.push(asset(calId.character(c.id), c.name, "character", { x: ASSET_X, y: ay }));
+    nodes.push(withImage(asset(calId.character(c.id), c.name, "character", { x: ASSET_X, y: ay }), c.sheet_path)); // [U14]
     ay += ASSET_GAP;
   }
   for (const l of story.locations) {
-    nodes.push(asset(calId.location(l.id), l.name, "location", { x: ASSET_X, y: ay }));
+    nodes.push(withImage(asset(calId.location(l.id), l.name, "location", { x: ASSET_X, y: ay }), l.reference_image_path)); // [U14]
     ay += ASSET_GAP;
   }
   for (const it of story.items) {
-    nodes.push(asset(calId.item(it.id), it.name, "item", { x: ASSET_X, y: ay }));
+    nodes.push(withImage(asset(calId.item(it.id), it.name, "item", { x: ASSET_X, y: ay }), it.reference_image_path)); // [U14]
     ay += ASSET_GAP;
   }
 
@@ -137,6 +144,7 @@ export function projectToGraph(data: CalliopeProjectData): { nodes: DirectorNode
           durationSec: s.duration_sec ?? undefined,
           videoPath: s.video_path ?? undefined,
           promoted: ds.promoted,
+          ...(jobsState ? { renderStatus: renderStatusOf(jobsState, s.id, !!s.video_path) } : {}),
         },
         parentId,
       ),

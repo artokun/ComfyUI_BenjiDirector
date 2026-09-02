@@ -14,6 +14,7 @@ import {
   type PortInfo,
 } from "@benjidirector/graph-core";
 import type { IconName } from "./icons.js";
+import { CONTAINER_Z, nextZ } from "./z-order.js"; // [U1]
 
 /** Port types. Deliberately few — these are the things that actually flow between scenes. */
 export type DirectorPortType = "text" | "ref" | "image" | "video";
@@ -98,6 +99,9 @@ export interface NoteData extends BaseNodeData {
   text: string;
   ports: PortInfo[];
   color?: string;
+  /** [U9] Pinned to the Beat's collapsed face, where it shows its first line. */
+  promoted?: boolean;
+  inSubgraph?: boolean;
 }
 
 /** A pass-through dot on a wire: one typed input, one typed output, same type. */
@@ -110,17 +114,36 @@ export interface RerouteData extends BaseNodeData {
 /** One row on a collapsed Beat's face: a descendant its author pinned. */
 export interface PromotedFace {
   id: string;
-  kind: "scene" | "asset";
+  kind: "scene" | "asset" | "note";
   label: string;
   durationSec?: number;
   videoPath?: string;
   assetKind?: AssetData["asset"];
+  /** [U9] Read-only detail a face may show: a scene's action line, a note's text. */
+  action?: string;
+  text?: string;
+}
+
+/**
+ * [U6] A handle on a COLLAPSED container that stands in for a hidden descendant's port, so a
+ * wire crossing the boundary has somewhere to land. `id` is derived —
+ * `${containerId}::proxy:${childPortId}` (collapse-view's `proxyHandleId`) — never minted.
+ */
+export interface ProxyHandle {
+  id: string;
+  childId: string;
+  childPortId: string;
+  side: "in" | "out";
+  type: string;
+  label: string;
 }
 
 export interface BeatData extends BaseNodeData, ContainerNodeData {
   kind: "beat";
   /** Derived every settle from pinned descendants — never edited directly. */
   faces?: PromotedFace[];
+  /** [U6] Derived every settle while collapsed, from the wires crossing the boundary — never edited directly. */
+  proxies?: ProxyHandle[];
   /** The expanded box, remembered while collapsed so expanding restores it. */
   expandedWidth?: number;
   expandedHeight?: number;
@@ -226,6 +249,7 @@ export const beat = (
   // measured — rendering from `data` is what made resizing appear to do nothing.
   width: size.width,
   height: size.height,
+  zIndex: CONTAINER_Z, // [U1] a container paints below the wires (z-order.ts)
   data: {
     kind: "beat",
     label,
@@ -239,16 +263,17 @@ export const beat = (
 /** Make a node of a palette kind at a position. One place, so every entry point agrees. */
 export function makeNode(kind: NodeKind, at: { x: number; y: number }, stamp?: string, opts: { portType?: DirectorPortType; label?: string } = {}): DirectorNode {
   const id = stamp ? `${kind === "scene" ? "sc" : kind}-${stamp}` : mintId(kind === "scene" ? "sc" : kind);
-  if (kind === "scene") return scene(id, opts.label ?? "New scene", at);
+  const zIndex = nextZ(); // [U1] a fresh leaf lands on top of the stack (z-order.ts)
+  if (kind === "scene") return { ...scene(id, opts.label ?? "New scene", at), zIndex };
   if (kind === "note") {
-    return { id, type: "note", position: at, width: 220, height: 120, data: { kind: "note", label: opts.label ?? "Note", text: "", ports: [] } };
+    return { id, type: "note", position: at, width: 220, height: 120, zIndex, data: { kind: "note", label: opts.label ?? "Note", text: "", ports: [] } };
   }
   if (kind === "reroute") {
     const portType = opts.portType ?? "image";
-    return { id, type: "reroute", position: at, data: { kind: "reroute", label: "reroute", portType, ports: reroutePorts(id, portType) } };
+    return { id, type: "reroute", position: at, zIndex, data: { kind: "reroute", label: "reroute", portType, ports: reroutePorts(id, portType) } };
   }
   const label = opts.label ?? (kind === "character" ? "New character" : kind === "location" ? "New location" : "New item");
-  return asset(id, label, kind, at);
+  return { ...asset(id, label, kind, at), zIndex };
 }
 
 /** What graph-core needs from us, and nothing else. */
