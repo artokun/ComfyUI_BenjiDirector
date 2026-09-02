@@ -214,7 +214,16 @@ describe("displayedEdges", () => {
   it("a subgraph inside a collapsed group: its outer halves re-route to the group's proxy of the rail", () => {
     const railIn = boundaryPortId("inner", "sc-01:in:CHARACTER");
     const outer = collapse(beat("outer", "Outer", { x: 0, y: 0 }));
-    const inner = { ...beat("inner", "Inner", { x: 0, y: 0 }), parentId: "outer", type: SUBGRAPH_TYPE } as DirectorNode;
+    // The rail has to be a REAL boundary port on `inner`, the way reconcile leaves it: the
+    // projection resolves the handle before proxying it, so a subgraph with an empty
+    // `promotedIn` has no rail for the outer group to stand in for.
+    const innerBase = beat("inner", "Inner", { x: 0, y: 0 });
+    const inner = {
+      ...innerBase,
+      parentId: "outer",
+      type: SUBGRAPH_TYPE,
+      data: { ...innerBase.data, promotedIn: [{ id: railIn, childId: "sc-01", childPortId: "sc-01:in:CHARACTER", type: "CHARACTER", label: "Nadia" }] },
+    } as DirectorNode;
     const nodes = [asset("char-nadia", "Nadia", "character", { x: 0, y: 0 }), outer, inner, scene("sc-01", "SC-01", { x: 0, y: 0 }, {}, "inner")];
     const edges: ViewEdge[] = [
       { id: "in-outer", source: "char-nadia", target: "inner", sourceHandle: "char-nadia:out:REF", targetHandle: railIn },
@@ -223,6 +232,8 @@ describe("displayedEdges", () => {
     const shown = displayedEdges(nodes, edges);
     expect(shown[0]).toMatchObject({ id: "in-outer@display", source: "char-nadia", target: "outer", targetHandle: `outer::proxy:${railIn}`, hidden: false });
     expect(shown[1]?.hidden).toBe(true);
+    // …and `outer` really derives that handle, so the re-route lands on a rendered port.
+    expect(proxyHandlesFor("outer", nodes, edges).map((p) => p.id)).toEqual([`outer::proxy:${railIn}`]);
   });
 
   it("both ends under DIFFERENT collapsed groups: each end takes its own container's proxy", () => {
@@ -268,6 +279,24 @@ describe("displayedEdges", () => {
     const extra = [...edges, link("sc-03", "LAST FRAME", "sc-04", "IN FRAME")];
     const c = displayedEdges([...collapsedNodes, scene("sc-04", "SC-04", { x: 0, y: 0 })], extra);
     expect(c[3]).toBe(extra[3]);
+  });
+
+  it("hides rather than proxies a crossing wire whose handle is not a port the child has", () => {
+    // The direction the earlier case leaves open: the handle EXISTS as a string, so the "no
+    // handle" guard passes, but `proxyHandlesFor` resolves no port for it and derives nothing.
+    // Re-routing there names a handle React Flow cannot find and the wire vanishes.
+    const { nodes, edges } = demo();
+    const collapsedNodes = nodes.map((n) => (n.id === "beat-1" ? collapse(n) : n));
+    const stale: ViewEdge = { ...edges[0]!, id: "stale", targetHandle: "sc-01:in:GONE" };
+    // The direction-disagreeing twin: a real port, wired as if it faced the other way.
+    const flipped: ViewEdge = { ...edges[0]!, id: "flipped", targetHandle: "sc-01:out:LAST FRAME" };
+    const shown = displayedEdges(collapsedNodes, [stale, flipped, edges[2]!]);
+    expect(proxyHandlesFor("beat-1", collapsedNodes, [stale, flipped])).toEqual([]);
+    expect(shown[0]).toMatchObject({ id: "stale@display", hidden: true });
+    expect(shown[1]).toMatchObject({ id: "flipped@display", hidden: true });
+    // The control: a well-formed crossing in the same call still proxies, so this is not
+    // passing because everything hid.
+    expect(shown[2]).toMatchObject({ hidden: false, source: "beat-1", sourceHandle: "beat-1::proxy:sc-02:out:LAST FRAME" });
   });
 
   it("hides rather than proxies a crossing wire with no handle to stand in for", () => {

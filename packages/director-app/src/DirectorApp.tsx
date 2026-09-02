@@ -2081,7 +2081,21 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   const activeTab = activePanel !== "canvas" ? tabPanels.find((p) => p.id === activePanel) : undefined;
   const displayedEdges = useDisplayedGraph(nodes as RFNode[], edges);
   // [U6] React Flow names the DISPLAYED edge in the changes it emits; state holds the canonical one.
-  const onDisplayedEdgesChange = useCallback((changes: EdgeChange[]) => onEdgesChange(canonicalEdgeChanges(changes)), [onEdgesChange]);
+  // INVARIANT: a wire may only LEAVE state through settle. `decorate` derives a collapsed card's
+  // proxy handles from the wires, and the Calliope write-back diffs them, so an edge removed on
+  // this path would leave a dead port on the card and a chain flag Calliope never hears about.
+  // Today React Flow emits no edge `remove` here — `deleteKeyCode` is null and Delete is U3's
+  // hotkey, which settles — so removals are routed through settle rather than applied directly.
+  const onDisplayedEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      const mapped = canonicalEdgeChanges(changes);
+      const gone = new Set(mapped.flatMap((c) => (c.type === "remove" ? [c.id] : [])));
+      const rest = gone.size ? mapped.filter((c) => c.type !== "remove") : mapped;
+      if (rest.length) onEdgesChange(rest);
+      if (gone.size) withCurrent((ns, es) => settle(ns, es.filter((e) => !gone.has(e.id))));
+    },
+    [onEdgesChange, settle, withCurrent],
+  );
   const onSelectionChange = useCallback(({ nodes: sel }: { nodes: Node[] }) => {
     const ids = sel.map((n) => n.id);
     setSelectedIds((cur) => (cur.length === ids.length && cur.every((id, i) => id === ids[i]) ? cur : ids));

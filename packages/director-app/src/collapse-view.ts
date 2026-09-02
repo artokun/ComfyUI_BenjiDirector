@@ -192,6 +192,15 @@ export function displayedEdges<E extends ViewEdge>(nodes: readonly ViewNode[], e
     return cache.get(id);
   };
 
+  // The SAME predicate `proxyHandlesFor` derives its handles from. An end this refuses is an
+  // end that container will not carry a proxy for, so re-routing to one would name a handle
+  // React Flow cannot find and the wire would silently vanish. Refused ends hide instead.
+  const proxiable = (nodeId: string, handle: string | null | undefined, wantInput: boolean): boolean => {
+    if (!handle) return false;
+    const port = portOn(byId.get(nodeId), handle);
+    return !!port && port.isInput === wantInput;
+  };
+
   let changed = false;
   const out = edges.map((e) => {
     const sg = outer(e.source);
@@ -200,8 +209,10 @@ export function displayedEdges<E extends ViewEdge>(nodes: readonly ViewNode[], e
     changed = true;
     const id = displayedEdgeId(e.id);
     const internal = (!!sg && sg === tg) || (!!sg && sg === e.target) || (!!tg && tg === e.source);
-    // An end with no handle cannot be proxied: there is no port for the proxy to stand in for.
-    if (internal || (sg && !e.sourceHandle) || (tg && !e.targetHandle)) return { ...e, id, hidden: true };
+    // An end with no handle, an unknown handle, or one whose direction disagrees with the edge
+    // cannot be proxied: there is no port for the proxy to stand in for.
+    const ends = (!sg || proxiable(e.source, e.sourceHandle, false)) && (!tg || proxiable(e.target, e.targetHandle, true));
+    if (internal || !ends) return { ...e, id, hidden: true };
     return {
       ...e,
       id,
