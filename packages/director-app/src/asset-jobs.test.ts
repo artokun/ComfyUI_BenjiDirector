@@ -22,7 +22,7 @@ import {
   type AssetItemRow,
   type EntityLists,
 } from "./asset-jobs.js";
-import { characterSheetTemplate, itemReferenceTemplate, locationReferenceTemplate } from "./asset-prompt-templates.js";
+import { characterSheetTemplate, itemReferenceTemplate, locationReferenceTemplate } from "./prompt-templates.js";
 
 // Rows as Calliope 1.2.1 returns them for the seeded project (see calliope-bind.test.ts).
 const nadia: CharacterRow = { id: 1, name: "Nadia", role: null, age: null, appearance: null, personality: null, portrait_path: null, sheet_path: null, consistency_prompt: "same woman" };

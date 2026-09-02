@@ -10,6 +10,7 @@
 import type { JobRow, SceneRow, WorkflowRow } from "@benjidirector/calliope-client";
 import { compactInputValues, isBlank, seedDefaults, type DynamicInput, type InputValues } from "./dynamic-form/types.js";
 import { hasRole } from "./dynamic-form/roles.js";
+import { parseTimeMs as parseTime } from "./time.js";
 
 export type SceneStatus = "pending" | "running" | "done" | "failed" | "idle";
 
@@ -86,22 +87,8 @@ export function doneCount(scenes: readonly Pick<SceneRow, "id" | "video_path">[]
   return scenes.filter((s) => statusOf(s, jobs) === "done").length;
 }
 
-/**
- * Parse a Calliope timestamp.
- *
- * SQLite's CURRENT_TIMESTAMP is ZONELESS — Calliope sends "2026-09-01 10:00:00" (and
- * sometimes an ISO string with no `Z`), and both are UTC. `Date.parse` reads the first as
- * local time and the second per the spec, so a job's "completed at" in the history drawer
- * lands hours off for anyone not on UTC. Anything already carrying a zone is left alone.
- */
-export function parseTime(value: string | null | undefined): number {
-  if (!value) return Number.NaN;
-  const s = value.trim();
-  if (!s) return Number.NaN;
-  const zoned = /(?:Z|z|[+-]\d{2}:?\d{2})$/.test(s);
-  const normalised = zoned ? s : `${s.replace(" ", "T")}Z`;
-  return Date.parse(normalised);
-}
+/** ms since epoch, NaN for nothing. One reading, shared with the job strip and queue panel. */
+export { parseTime };
 
 /** A local-time rendering of a Calliope timestamp, or "" when there is none to show. */
 export function formatTime(value: string | null | undefined): string {

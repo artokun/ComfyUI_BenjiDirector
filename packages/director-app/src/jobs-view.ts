@@ -11,6 +11,7 @@
 
 import type { JobRow, SceneRow, StoryBundle } from "@benjidirector/calliope-client";
 import type { IconName } from "./icons.js";
+import { parseTime } from "./time.js";
 
 // ── kinds ────────────────────────────────────────────────────────────────────
 
@@ -74,15 +75,8 @@ export function labelFor(job: JobRow, story: StoryBundle | null, scenes: SceneRo
 
 // ── time ─────────────────────────────────────────────────────────────────────
 
-const ZONELESS = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/;
-
-/** ms since epoch, or null. A zoneless "YYYY-MM-DD HH:MM:SS" is SQLite's UTC, not local time. */
-export function parseTime(s: string | null | undefined): number | null {
-  if (!s) return null;
-  const m = ZONELESS.exec(s.trim());
-  const t = m ? Date.parse(`${m[1]}T${m[2]}Z`) : Date.parse(s);
-  return Number.isNaN(t) ? null : t;
-}
+/** ms since epoch, or null. One reading, shared with the job strip and the render drawer. */
+export { parseTime };
 
 /** Calliope's compact style: "just now", "3m ago", "2h ago", "4d ago", "2mo ago", "1y ago". */
 export function relativeTime(s: string | null | undefined, now: number = Date.now()): string {

@@ -15,7 +15,7 @@
 
 import type { CharacterRow, ItemRow, JobRow, LocationRow, Schemas, WorkflowInput, WorkflowRow } from "@benjidirector/calliope-client";
 import type { AssetOption } from "./dynamic-form/index.js";
-import { characterSheetTemplate, itemReferenceTemplate, locationReferenceTemplate } from "./asset-prompt-templates.js";
+import { characterSheetTemplate, itemReferenceTemplate, locationReferenceTemplate } from "./prompt-templates.js";
 
 export type EntityKind = "character" | "location" | "item";
 export interface EntityRef {

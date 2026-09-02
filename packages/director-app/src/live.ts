@@ -23,6 +23,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { subscribeEvents, type CalliopeEvent, type EventSubscription, type JobRow, type SceneRow, type StoryBundle } from "@benjidirector/calliope-client";
 import { useDirector } from "./director-context.js";
+import { parseTime } from "./time.js";
 
 export type ConnectionState = "closed" | "connecting" | "open" | "reconnecting";
 
@@ -105,22 +106,9 @@ export function synthesize(prev: number): number {
   return prev + (LIVE.TICK_CAP - prev) * LIVE.TICK_STEP;
 }
 
-const ZONELESS = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/;
 
-/**
- * ms since epoch, or null. Calliope's rows carry SQLite `CURRENT_TIMESTAMP` strings
- * ("2026-09-01 10:00:00") which are UTC with NO zone marker — `Date.parse` reads such a string
- * as LOCAL time and skews it by the zone offset. Two stamps must also stay comparable across
- * formats: a row this store patched carries an ISO `T…Z`, and comparing that against a zoneless
- * one as raw TEXT sorts every "T" after every " " whatever the clocks actually say.
- * Behaviour matches `jobs-view.ts`' `parseTime`, so the strip and the queue panel agree.
- */
-export function parseTime(s: string | null | undefined): number | null {
-  if (!s) return null;
-  const m = ZONELESS.exec(s.trim());
-  const t = m ? Date.parse(`${m[1]}T${m[2]}Z`) : Date.parse(s);
-  return Number.isNaN(t) ? null : t;
-}
+/** ms since epoch, or null. One reading, shared with the queue panel and the render drawer. */
+export { parseTime };
 
 /** What the store needs from a client. Structural, so a test can hand it two functions. */
 export interface JobsSource {
