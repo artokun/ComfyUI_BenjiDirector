@@ -83,6 +83,10 @@ import { summarizeEdge, summarizeNode } from "./outline.js";
 import { usePanels } from "./panels.js";
 import { Slot } from "./slots.jsx";
 import { PALETTE_KINDS } from "./model.js";
+// ── [U3] clipboard, hotkeys, help ──
+import { duplicateNodes } from "./clipboard.js";
+import { openHelp } from "./help.jsx";
+import { useEditorHotkeys } from "./useEditorHotkeys.js";
 
 // React Flow types node data as an index signature; ours are interfaces. Identical at runtime,
 // so the casts stay confined to these aliases.
@@ -510,21 +514,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     return undefined;
   }, [setEdges, setNodes, withCurrent]);
 
-  // Ctrl/Cmd+Z and Ctrl+Shift+Z, scoped to the pane so they never steal ComfyUI's own undo
-  // while the user is working on the canvas behind us.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
-      const root = canvasRef.current?.closest(".bd-root");
-      if (!root || (!root.contains(document.activeElement) && !root.matches(":hover"))) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.shiftKey) redo();
-      else undo();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [redo, undo]);
+  // The keyboard (undo/redo included) is `useEditorHotkeys`, mounted below once `drive` exists.
 
   /** Repair: treat the EDGES as the source of truth and re-derive every boundary from them. */
   const repair = useCallback(() => {
@@ -861,11 +851,14 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     [settle, withCurrent],
   );
 
-  /** Delete the selection, and every edge that touched it, then reconcile. */
+  /** Delete the selection — nodes and selected wires — and every edge that touched it, then reconcile. */
   const deleteSelection = useCallback(() => {
     withCurrent((ns, es) => {
       const doomed = new Set(ns.filter((n) => n.selected).map((n) => n.id));
-      if (!doomed.size) {
+      // [U3] Selected wires go too: the Delete key is ours now (React Flow's own delete
+      // bypassed the undo snapshot), so a selected edge must still be deletable from it.
+      const wires = new Set(es.filter((e) => e.selected).map((e) => e.id));
+      if (!doomed.size && !wires.size) {
         setNote("nothing selected");
         return;
       }
@@ -881,10 +874,10 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
           }
         }
       }
-      setNote(`deleted ${doomed.size} node${doomed.size === 1 ? "" : "s"}`);
+      setNote(doomed.size ? `deleted ${doomed.size} node${doomed.size === 1 ? "" : "s"}` : `deleted ${wires.size} wire${wires.size === 1 ? "" : "s"}`);
       settle(
         ns.filter((n) => !doomed.has(n.id)),
-        es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target)),
+        es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target) && !wires.has(e.id)),
         { reparent: false },
       );
     });
@@ -1051,9 +1044,21 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
           settle(ns.filter((n) => n.id !== nodeId), es.filter((e) => e.source !== nodeId && e.target !== nodeId), { reparent: false });
         });
       },
-      duplicate: () => {
-        setNote("not implemented yet [U3] duplicate");
-        return [];
+      duplicate(nodeIds) {
+        // [U3] Copy + paste at +40/+40 in one step, clipboard untouched. The copy is cut from
+        // the graph as it stands NOW so the new ids can be returned synchronously; the settle
+        // that lands it queues behind whatever is already in flight, like every action.
+        const out = duplicateNodes(asCore(nodesRef.current as RFNode[]), asCoreEdges(edgesRef.current), nodeIds);
+        if (!out.ids.length) {
+          setNote("nothing to duplicate");
+          return [];
+        }
+        withCurrent((ns, es) => {
+          const pasted = asRF(out.nodes).map((n) => ({ ...n, selected: true }) as RFNode);
+          settle([...ns.map((n) => (n.selected ? ({ ...n, selected: false } as RFNode) : n)), ...pasted], [...es, ...asRFEdges(out.edges)]);
+          setNote(`duplicated ${out.ids.length} node${out.ids.length === 1 ? "" : "s"}`);
+        });
+        return out.ids;
       },
       deleteContainer: () => setNote("not implemented yet [U5] deleteContainer"),
       updateBlueprint: () => setNote("not implemented yet [U7] updateBlueprint"),
@@ -1538,6 +1543,26 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
 
   // ── [U0] context for modules, registered panels, displayed graph ──
   const drive = useCallback<DriveFn>((name, args = {}) => (apiRef?.current ? apiRef.current(name, args) : Promise.reject(new Error("editor not ready"))), [apiRef]);
+  // ── [U3] the keyboard: chords run the editor's own callbacks or a drive command, never a third path ──
+  useEditorHotkeys({
+    canvasRef,
+    undo,
+    redo,
+    deleteSelection,
+    groupSelection,
+    closePalette: () => {
+      if (!palette) return false;
+      setPalette(null);
+      return true;
+    },
+    selectedIds: () => (nodesRef.current as RFNode[]).filter((n) => n.selected).map((n) => n.id),
+    allIds: () => (nodesRef.current as RFNode[]).map((n) => n.id),
+    hasSelection: () => nodesRef.current.some((n) => n.selected) || edgesRef.current.some((e) => e.selected),
+    drive,
+    screenToFlowPosition,
+    setNote,
+    openHelp,
+  });
   const ctx = useMemo<DirectorCtx>(
     () => ({
       client,
@@ -1670,7 +1695,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                   openPalette(ev.clientX, ev.clientY, null);
                 }}
                 onNodesDelete={() => queueMicrotask(() => withCurrent((ns, es) => settle(ns, es, { reparent: false })))}
-                deleteKeyCode={["Delete", "Backspace"]}
+                deleteKeyCode={null /* [U3] Delete is a hotkey → deleteSelection, so undo records the pre-delete graph */}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 fitView

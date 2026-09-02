@@ -3,8 +3,15 @@
 // Rendered inside `.bd-root` (absolute, not fixed — the panel's own overlay has a transform,
 // and `position: fixed` resolves against it). Promise-based so callers read like a sentence:
 //   if (!(await modal.confirm({ title: "Delete Beat 1?", danger: true }))) return;
+//
+// [U3] "Inside .bd-root" is a PORTAL, not a hope: the provider wraps the root rather than
+// living in it, so rendering the view in place put it under <body>, where not one `--bd-*`
+// token resolves — measured: backdrop and panel `rgba(0,0,0,0)`, text `rgb(0,0,0)`, an
+// invisible dialog over the canvas. The tokens are declared ON `.bd-root`, so the view has to
+// be a descendant of it to be styled at all.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export interface ConfirmOptions {
   title: string;
@@ -110,7 +117,11 @@ function ModalView({ pending, finish }: { pending: Pending; finish: (v: unknown)
     return () => window.removeEventListener("keydown", onKey, true);
   }, [finish, pending.kind]);
   const cancel = () => finish(pending.kind === "confirm" ? false : null);
-  return (
+  // The root is in the DOM before any modal can open (the provider's children rendered on
+  // mount), so this resolves on the first render that has something to show. No root — a unit
+  // test rendering the provider alone — falls back to rendering in place.
+  const host = typeof document === "undefined" ? null : document.querySelector(".bd-root");
+  const view = (
     <div className="bd-modal-backdrop" onPointerDown={cancel}>
       <div className="bd-modal" role="dialog" aria-modal="true" onPointerDown={(e) => e.stopPropagation()}>
         <div className="bd-modal-title">{pending.o.title}</div>
@@ -158,4 +169,5 @@ function ModalView({ pending, finish }: { pending: Pending; finish: (v: unknown)
       </div>
     </div>
   );
+  return host ? createPortal(view, host) : view;
 }
