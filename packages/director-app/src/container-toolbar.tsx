@@ -5,6 +5,7 @@
 import { NodeToolbar, Position } from "@xyflow/react";
 import { useEffect, useState } from "react";
 import { useActions } from "./actions.js";
+import { DeleteContainerButton } from "./container-delete.jsx";
 import { Icon } from "./icons.js";
 import { GROUP_PRESET_COLORS } from "./model.js";
 
@@ -87,7 +88,7 @@ export function ContainerToolbar({
           <Icon name="save" />
         </button>
       ) : null}
-      {/* [U5] delete button lands here */}
+      <DeleteContainerButton id={id} />
       {/* The swatch popover lives INSIDE the toolbar: the toolbar is portalled above the canvas,
           whereas anything rendered inside the container card is trapped under its children. */}
       {paletteOpen ? (

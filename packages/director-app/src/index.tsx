@@ -18,7 +18,7 @@ import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 import "./node-chrome.jsx";
 import "./clipboard.drive.js"; import "./help.jsx"; // U3 (useEditorHotkeys is mounted by DirectorApp)
 // U4 import "./sidebar.jsx"; import "./persistence.js";
-// U5 import "./container-delete.jsx";
+import "./container-delete.jsx"; // U5
 // U6 (collapse-view.ts is imported by DirectorApp)
 import "./blueprint-modal.jsx"; // U7
 import "./selection-toolbar.jsx"; // U8a
