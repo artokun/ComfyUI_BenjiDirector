@@ -32,7 +32,7 @@ import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
 // U15 import "./RenderPanel.jsx";
 // U16 import "./WorkflowsPanel.jsx";
 import "./QueuePanel.jsx"; // U17
-// U18 import "./PlaygroundPanel.jsx";
+import "./PlaygroundPanel.jsx"; // U18
 // U19 (styles only)
 
 export interface MountOptions {
