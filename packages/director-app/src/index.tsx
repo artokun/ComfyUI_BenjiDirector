@@ -24,7 +24,7 @@ import "./blueprint-modal.jsx"; // U7
 // U8a import "./selection-toolbar.jsx";
 // U8b import "./reroute.jsx";
 // U9 import "./note-node.jsx";
-// U10 import "./JobStrip.jsx";
+import "./JobStrip.jsx"; // U10
 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
 // U12 import "./Inspector.jsx";
 // U13 (calliope-sync.ts is imported by DirectorApp)
