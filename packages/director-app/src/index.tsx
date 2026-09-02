@@ -17,7 +17,7 @@ import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 // U1 (stability: nothing to import)
 // U2 import "./node-chrome.jsx";
 // U3 import "./useEditorHotkeys.js"; import "./help.jsx";
-// U4 import "./sidebar.jsx"; import "./persistence.js";
+import "./sidebar.jsx"; import "./persistence.js"; // U4
 // U5 import "./container-delete.jsx";
 // U6 (collapse-view.ts is imported by DirectorApp)
 // U7 import "./blueprint-modal.jsx";
