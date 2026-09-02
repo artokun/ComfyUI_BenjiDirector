@@ -84,6 +84,7 @@ import {
   directorHost,
   makeNode,
   type AssetData,
+  type NoteData,
   type BeatData,
   type DirectorData,
   type DirectorPortType,
@@ -190,10 +191,14 @@ function decorate(nodes: RFNode[], edges: Edge[]): { nodes: RFNode[]; edges: Edg
     const faces: PromotedFace[] = descendantsOf(n.id)
       .filter((c) => (c.data as SceneData).promoted)
       .map((c) => {
-        const d = c.data as SceneData | AssetData;
-        return d.kind === "scene"
-          ? { id: c.id, kind: "scene", label: d.heading ?? d.label, durationSec: d.durationSec, videoPath: d.videoPath }
-          : { id: c.id, kind: "asset", label: d.label, assetKind: d.asset };
+        // The face's kind is the NODE's kind. A note pinned to a Beat used to be reported as
+        // an `asset` with no asset kind — masked on screen, because the face row re-reads the
+        // live node, but `outline` hands `faces` straight to the agent, which would then reach
+        // for an asset action on a sticky.
+        const d = c.data as SceneData | AssetData | NoteData;
+        if (d.kind === "scene") return { id: c.id, kind: "scene", label: d.heading ?? d.label, durationSec: d.durationSec, videoPath: d.videoPath };
+        if (d.kind === "note") return { id: c.id, kind: "note", label: d.label, text: d.text };
+        return { id: c.id, kind: "asset", label: d.label, assetKind: d.asset };
       });
     const prev = rails(n).faces ?? [];
     const same =

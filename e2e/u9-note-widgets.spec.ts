@@ -106,6 +106,11 @@ test("a pinned scene's duration is a RangeControl on the collapsed Beat's face; 
   await expect(face).toBeVisible();
   await expect(face.locator(".bd-face-label")).toHaveText("SC-01 · Nadia climbs out");
   await expect(beat.locator(`.bd-face[data-face="${made.id}"]`)).toContainText("Shot list");
+  // The face the AGENT is handed says note, not asset. On screen the row re-reads the live
+  // node so a wrong kind is invisible; `outline` has no such second chance.
+  const beatOut = (await drive<{ nodes: { id: string; faces?: { id: string; kind: string }[] }[] }>(page, "outline")).nodes.find((n) => n.id === "beat-1");
+  expect(beatOut?.faces?.find((f) => f.id === made.id)?.kind).toBe("note");
+  expect(beatOut?.faces?.find((f) => f.id === "sc-01")?.kind).toBe("scene");
 
   expect(await durationOf(page, "sc-01")).toBe(6);
   const beatBefore = await drive<{ position: { x: number; y: number } }>(page, "read_node", { id: "beat-1" });
