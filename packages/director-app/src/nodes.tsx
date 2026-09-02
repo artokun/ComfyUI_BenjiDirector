@@ -36,6 +36,7 @@ import { emptySlotHandle, innerHandleId, type BoundaryPort } from "@benjidirecto
 import { useActions } from "./actions.js";
 import { FaceRow } from "./faces.jsx";
 import { ACCENT, ContainerToolbar } from "./container-toolbar.jsx";
+import { AssetThumb } from "./asset-thumb.jsx"; // [U14]
 import { Icon } from "./icons.js";
 import { RenderBadge } from "./render-badge.jsx";
 import {
@@ -160,6 +161,7 @@ export function AssetNode({ id, data, selected }: NodeProps) {
         <span className="bd-icon">{icon}</span>
         {d.label}
       </div>
+      {d.imagePath ? <AssetThumb path={d.imagePath} /> : null /* [U14] */}
       {out ? (
         <div className="bd-ports">
           <div className="bd-port bd-port-out">

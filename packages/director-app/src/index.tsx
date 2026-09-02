@@ -28,7 +28,7 @@ import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 // U11 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx";
 // U12 import "./Inspector.jsx";
 // U13 (calliope-sync.ts is imported by DirectorApp)
-// U14 import "./AssetsPanel.jsx";
+import "./AssetsPanel.jsx"; // U14
 // U15 import "./RenderPanel.jsx";
 // U16 import "./WorkflowsPanel.jsx";
 // U17 import "./QueuePanel.jsx";
