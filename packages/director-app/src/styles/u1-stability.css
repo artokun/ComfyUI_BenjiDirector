@@ -1,0 +1,46 @@
+/* ── [U1] stability: z-order + leaf resize ──────────────────────────────────────────────── */
+
+/* Containers are pinned below the wires (z-order.ts). React Flow computes a NodeToolbar's z
+   as its node's z + 1, which for a Beat is 0 — under every leaf. Pin the toolbars up; the
+   inline z React Flow writes is why this needs !important. */
+.bd-root .react-flow__node-toolbar { z-index: 1000 !important; }
+
+/* A leaf card fills its React Flow wrapper, so the width/height the grip writes is what you
+   see. Without an explicit size the wrapper is content-sized and the percentages resolve to
+   the card's own size, so an unresized card looks exactly as it did. The minimum moves from
+   the card to the wrapper so the grip and the stylesheet agree on it. */
+.bd-root .react-flow__node-scene,
+.bd-root .react-flow__node-asset { min-width: 180px; }
+.bd-root .react-flow__node-scene > .bd-node,
+.bd-root .react-flow__node-asset > .bd-node { width: 100%; height: 100%; min-width: 0; box-sizing: border-box; }
+
+/* The grip: bottom-right corner, faint until the card is hovered or selected. */
+.bd-root .react-flow__resize-control.handle.bd-grip {
+  width: 16px;
+  height: 16px;
+  left: 100%;
+  top: 100%;
+  transform: translate(-100%, -100%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0 3px 3px 0;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  border-radius: 0 0 var(--bd-radius) 0;
+  color: var(--bd-dim);
+  opacity: 0.35;
+  cursor: nwse-resize;
+  transition: opacity var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease);
+}
+.bd-root .react-flow__node:hover .bd-grip,
+.bd-root .react-flow__node.selected .bd-grip { opacity: 0.9; }
+.bd-root .react-flow__resize-control.handle.bd-grip:hover { color: var(--bd-accent); opacity: 1; }
+
+/* A collapsed Beat's width-only resizer lives on its right edge, and the card's own header —
+   a later sibling in the same stacking context — painted over the middle of it, so the edge
+   was only grabbable near its corners. Raise the edge controls over the card's content; they
+   are 2px strips at the boundary, so nothing else wants those pixels. */
+.bd-root .react-flow__resize-control.line { z-index: 2; }
+.bd-root .react-flow__resize-control.handle { z-index: 3; }

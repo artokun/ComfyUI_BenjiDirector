@@ -703,17 +703,6 @@
 .bd-sync.is-saved { color: var(--bd-ok); border-color: #1f4d2e; }
 .bd-sync.is-error { color: var(--bd-bad); border-color: #5a2222; }
 
-/* A container's empty body is transparent to the pointer — as with a LiteGraph group, you pick
-   it up by its title bar — so a wire that crosses the box stays hoverable and clickable. Its
-   title, rails and resize handles stay solid, and a collapsed card is all face, so it does too. */
-.react-flow__node-groupbox,
-.react-flow__node-subgraph,
-.react-flow__node-groupbox > .bd-group,
-.react-flow__node-subgraph > .bd-subgraph { pointer-events: none !important; } /* React Flow sets `all` inline on the wrapper */
-.react-flow__node-groupbox > .bd-group > *,
-.react-flow__node-subgraph > .bd-subgraph > *,
-.react-flow__node-subgraph > .bd-collapsed { pointer-events: auto; }
-
 
 /* ── [U0] foundation chrome: layout, tabs, docks, buttons, inputs, modal ─────────────── */
 .bd-body { flex: 1; min-height: 0; display: flex; }

@@ -14,6 +14,7 @@ import {
   type PortInfo,
 } from "@benjidirector/graph-core";
 import type { IconName } from "./icons.js";
+import { CONTAINER_Z, nextZ } from "./z-order.js"; // [U1]
 
 /** Port types. Deliberately few — these are the things that actually flow between scenes. */
 export type DirectorPortType = "text" | "ref" | "image" | "video";
@@ -226,6 +227,7 @@ export const beat = (
   // measured — rendering from `data` is what made resizing appear to do nothing.
   width: size.width,
   height: size.height,
+  zIndex: CONTAINER_Z, // [U1] a container paints below the wires (z-order.ts)
   data: {
     kind: "beat",
     label,
@@ -239,16 +241,17 @@ export const beat = (
 /** Make a node of a palette kind at a position. One place, so every entry point agrees. */
 export function makeNode(kind: NodeKind, at: { x: number; y: number }, stamp?: string, opts: { portType?: DirectorPortType; label?: string } = {}): DirectorNode {
   const id = stamp ? `${kind === "scene" ? "sc" : kind}-${stamp}` : mintId(kind === "scene" ? "sc" : kind);
-  if (kind === "scene") return scene(id, opts.label ?? "New scene", at);
+  const zIndex = nextZ(); // [U1] a fresh leaf lands on top of the stack (z-order.ts)
+  if (kind === "scene") return { ...scene(id, opts.label ?? "New scene", at), zIndex };
   if (kind === "note") {
-    return { id, type: "note", position: at, width: 220, height: 120, data: { kind: "note", label: opts.label ?? "Note", text: "", ports: [] } };
+    return { id, type: "note", position: at, width: 220, height: 120, zIndex, data: { kind: "note", label: opts.label ?? "Note", text: "", ports: [] } };
   }
   if (kind === "reroute") {
     const portType = opts.portType ?? "image";
-    return { id, type: "reroute", position: at, data: { kind: "reroute", label: "reroute", portType, ports: reroutePorts(id, portType) } };
+    return { id, type: "reroute", position: at, zIndex, data: { kind: "reroute", label: "reroute", portType, ports: reroutePorts(id, portType) } };
   }
   const label = opts.label ?? (kind === "character" ? "New character" : kind === "location" ? "New location" : "New item");
-  return asset(id, label, kind, at);
+  return { ...asset(id, label, kind, at), zIndex };
 }
 
 /** What graph-core needs from us, and nothing else. */
