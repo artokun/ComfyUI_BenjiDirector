@@ -500,6 +500,13 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
           });
         }
       }
+      // Publish to the refs BEFORE the state setters. `withCurrent` now reads the graph from
+      // the refs in a microtask (it must not read from inside a state updater — that was the
+      // render loop [U5] found), and the refs are otherwise only assigned during render. Two
+      // mutations queued before React commits would both read the same base and the first
+      // would be lost. Assigning here makes the next microtask see this settle's result.
+      nodesRef.current = done.nodes;
+      edgesRef.current = done.edges;
       setNodes(done.nodes);
       setEdges(done.edges);
     },
@@ -541,6 +548,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       (ns, es) => {
         future.current.push({ nodes: ns, edges: es });
         const done = decorate(prev.nodes, prev.edges);
+        nodesRef.current = done.nodes;
+        edgesRef.current = done.edges;
         setNodes(done.nodes);
         setEdges(done.edges);
         restoring.current = false;
@@ -559,6 +568,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       (ns, es) => {
         history.current.push({ nodes: ns, edges: es });
         const done = decorate(next.nodes, next.edges);
+        nodesRef.current = done.nodes;
+        edgesRef.current = done.edges;
         setNodes(done.nodes);
         setEdges(done.edges);
         restoring.current = false;
