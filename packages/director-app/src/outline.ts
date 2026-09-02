@@ -20,7 +20,7 @@ export function summarizeNode(n: RFNode): Record<string, unknown> {
   };
   if (n.type === GROUP_TYPE || n.type === SUBGRAPH_TYPE) {
     const d = n.data as BeatData;
-    return { ...base, kind: "beat", collapsed: !!d.collapsed, color: d.color ?? null, promotedIn: d.promotedIn, promotedOut: d.promotedOut, faces: d.faces ?? [], blueprintId: d.blueprintId ?? null };
+    return { ...base, kind: "beat", collapsed: !!d.collapsed, color: d.color ?? null, promotedIn: d.promotedIn, promotedOut: d.promotedOut, faces: d.faces ?? [], proxies: d.proxies ?? [], blueprintId: d.blueprintId ?? null };
   }
   const d = n.data as SceneData | AssetData | NoteData | RerouteData;
   switch (d.kind) {
@@ -30,6 +30,8 @@ export function summarizeNode(n: RFNode): Record<string, unknown> {
         kind: "scene",
         heading: d.heading,
         durationSec: d.durationSec ?? null,
+        action: d.action ?? null,
+        dialog: d.dialog ?? null,
         videoPath: d.videoPath ?? null,
         promoted: !!d.promoted,
         inSubgraph: !!d.inSubgraph,
@@ -48,6 +50,7 @@ export function summarizeNode(n: RFNode): Record<string, unknown> {
         inSubgraph: !!d.inSubgraph,
         bypassed: !!d.bypassed,
         color: d.color ?? null,
+        collapsed: !!d.collapsed,
         imagePath: d.imagePath ?? null,
         ports: d.ports.map((p) => ({ id: p.id, type: p.type, isInput: p.isInput, label: p.label })),
       };
