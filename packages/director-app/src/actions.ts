@@ -42,10 +42,10 @@ export interface EditorActions {
   duplicate(nodeIds: string[]): string[];
   /** [U5] Delete a container: everything inside, or only the shell (children re-parent up). */
   deleteContainer(containerId: string, mode: "all" | "shell"): void;
-  /** [U7] Re-save an existing blueprint from a container. */
+  /** [U7] Re-save an existing blueprint from a container (the one linked to it when omitted). */
   updateBlueprint(blueprintId: string, containerId?: string): void;
-  /** [U7] Remove a blueprint from the library. */
-  deleteBlueprint(blueprintId: string): void;
+  /** [U7] Remove a blueprint from the library. Asks first unless `confirm: false`. */
+  deleteBlueprint(blueprintId: string, opts?: { confirm?: boolean }): void;
   /** [U9] Edit a note's markdown. */
   setNoteText(nodeId: string, text: string): void;
 }
