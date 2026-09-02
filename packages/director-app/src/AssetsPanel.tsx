@@ -26,6 +26,8 @@ import type { JobRow, Schemas, WorkflowRow } from "@benjidirector/calliope-clien
 import { useDirector } from "./director-context.js";
 import { DynamicInputs, type AssetOption, type DynamicInput } from "./dynamic-form/index.jsx";
 import { Icon, type IconName } from "./icons.js";
+import { fetchObjectInfo } from "./comfy-models.js"; // [U22]
+import { installStarters, installSummary, STARTERS } from "./starter-workflows.js"; // [U22]
 import { progressFor, useJobs } from "./live.js";
 import { useModal } from "./modal.jsx";
 import { registerPanel } from "./panels.js";
@@ -123,8 +125,33 @@ export function AssetsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
+  // [U22] What the starter install said, kept so the panel can show it after the button goes.
+  const [installNote, setInstallNote] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
   const reload = useCallback(() => setReloads((n) => n + 1), []);
+
+  /**
+   * [U22] Register the workflows this panel ships, so a fresh install can make a picture.
+   *
+   * The model names in a shipped workflow are true on the machine it was exported from and
+   * nowhere else, so they are resolved against THIS ComfyUI's own `/object_info` first — the
+   * same list its dropdowns show. A model nothing matches is reported, not guessed at.
+   */
+  const onInstallStarters = useCallback(async () => {
+    setBusy("install");
+    setError(null);
+    setInstallNote(null);
+    try {
+      const info = await fetchObjectInfo();
+      const report = await installStarters(client, info, { existing: workflows });
+      setInstallNote(installSummary(report));
+      reload();
+    } catch (err) {
+      setError(`could not install the starter workflows: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  }, [client, reload, workflows]);
   const fileInputs = useRef(new Map<string, HTMLInputElement>());
 
   // ── loading ────────────────────────────────────────────────────────────────
@@ -283,10 +310,12 @@ export function AssetsPanel() {
     setBusy("all");
     setError(null);
     try {
+      // [U22] The schema travels with the values: a role this form HIDES must not be sent as an
+      // override, or the workflow's default prompt beats the one Calliope derived for the asset.
       const perKind = {
-        character: { workflowId: workflowIdFor("character") ?? workflowId, inputValues: valuesByKind.character },
-        location: { workflowId: workflowIdFor("location") ?? workflowId, inputValues: valuesByKind.location },
-        item: { workflowId: workflowIdFor("item") ?? workflowId, inputValues: valuesByKind.item },
+        character: { workflowId: workflowIdFor("character") ?? workflowId, inputValues: valuesByKind.character, inputs: workflowFor("character")?.input_schema },
+        location: { workflowId: workflowIdFor("location") ?? workflowId, inputValues: valuesByKind.location, inputs: workflowFor("location")?.input_schema },
+        item: { workflowId: workflowIdFor("item") ?? workflowId, inputValues: valuesByKind.item, inputs: workflowFor("item")?.input_schema },
       };
       let queued = 0;
       for (const body of generateAllMissingPlan(lists, workflowId, perKind)) {
@@ -321,7 +350,7 @@ export function AssetsPanel() {
         await patchEntity(kind, row.id, { consistency_prompt: prompt });
         setDrafts(({ [key]: _drop, ...rest }) => rest);
       }
-      await client.assets.generate(projectId, generateOnePlan({ kind, id: row.id }, { workflowId, inputValues: valuesByKind[kind], prompt }));
+      await client.assets.generate(projectId, generateOnePlan({ kind, id: row.id }, { workflowId, inputValues: valuesByKind[kind], inputs: workflowFor(kind)?.input_schema, prompt }));
       await after(`queued ${nounOf(kind).image} for ${row.name}`);
     } catch (err) {
       setError(message(err));
@@ -470,7 +499,19 @@ export function AssetsPanel() {
       </div>
 
       {error ? <p className="bd-assets-err">{error}</p> : null}
-      {noWorkflows ? <p className="bd-assets-note bd-assets-warn">No enabled image workflow — add one in Calliope’s Settings → Workflows, or upload your own images below.</p> : null}
+      {noWorkflows ? (
+        <div className="bd-assets-note bd-assets-warn bd-assets-starter" data-starter-prompt>
+          <p>No image workflow yet. The Director ships one built from stock ComfyUI nodes — install it and every card here can generate.</p>
+          <button type="button" className="bd-btn is-primary" data-install-starters onClick={() => void onInstallStarters()} disabled={busy !== null}>
+            <Icon name="download" /> {busy === "install" ? "Installing…" : `Install the starter workflow${STARTERS.length === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      ) : null}
+      {installNote ? (
+        <pre className="bd-assets-note bd-assets-install" data-install-note>
+          {installNote}
+        </pre>
+      ) : null}
 
       <section className="bd-assets-card">
         <div className="bd-assets-card-head">

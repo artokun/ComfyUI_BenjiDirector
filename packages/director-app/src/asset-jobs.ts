@@ -154,6 +154,31 @@ export function compactInputValues(values: InputValues | null | undefined): Inpu
   return out;
 }
 
+/**
+ * [U22] The values worth SENDING: what the form actually collected.
+ *
+ * A hidden role is one the CALLER owns — the Assets panel writes the positive prompt from the
+ * card's own template — and the form still seeds every input's default so the widgets have
+ * something to show. Sending the hidden ones puts the WORKFLOW's default prompt in
+ * `input_values`, which is an explicit override and beats the prompt Calliope derived for the
+ * asset. Measured, not reasoned: with the prompt seeded, a character and a location generated
+ * the same picture, and because both graphs were then identical ComfyUI's cache made it
+ * literally the same FILE on both rows.
+ */
+export function sendableInputValues(
+  inputs: readonly WorkflowInput[] | null | undefined,
+  values: InputValues | null | undefined,
+  hideRoles: readonly string[] = PROMPT_HIDE_ROLES,
+): InputValues {
+  const hidden = new Set((inputs ?? []).filter((i) => hideRoles.includes(normalizeInputRole(i.role) ?? "")).map((i) => i.nodeId));
+  const out: InputValues = {};
+  for (const [k, v] of Object.entries(compactInputValues(values))) {
+    if (hidden.has(k)) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 /** Seed schema defaults into the values a form starts from (Calliope skips empty-string defaults). */
 export function seedInputDefaults(inputs: readonly WorkflowInput[], values: InputValues = {}): InputValues {
   const next = { ...values };
@@ -215,6 +240,8 @@ export function promptFor(kind: EntityKind, row: EntityRow, draft?: string): str
 export interface KindGeneration {
   workflowId?: number;
   inputValues?: InputValues;
+  /** [U22] The workflow's schema, so a role the form HID is not sent as an override. */
+  inputs?: readonly WorkflowInput[];
 }
 
 /**
@@ -225,7 +252,7 @@ export interface KindGeneration {
  */
 export function generateAllMissingPlan(lists: EntityLists, workflowId: number, perKind: Partial<Record<EntityKind, KindGeneration>> = {}): GenerateAssetsBody[] {
   const wf = (kind: EntityKind) => perKind[kind]?.workflowId ?? workflowId;
-  const values = (kind: EntityKind) => compactInputValues(perKind[kind]?.inputValues);
+  const values = (kind: EntityKind) => sendableInputValues(perKind[kind]?.inputs, perKind[kind]?.inputValues);
   return [
     { missing_only: true, asset_target: "sheet", workflow_id: wf("character"), character_ids: lists.characters.map((c) => c.id), input_values: values("character") },
     { missing_only: true, asset_target: "sheet", workflow_id: wf("location"), character_ids: [], location_ids: lists.locations.map((l) => l.id), input_values: values("location") },
@@ -234,12 +261,12 @@ export function generateAllMissingPlan(lists: EntityLists, workflowId: number, p
 }
 
 /** Generate / regenerate ONE entity's image, with the prompt the card shows. */
-export function generateOnePlan(entity: EntityRef, opts: { workflowId: number; inputValues?: InputValues; prompt?: string | null }): GenerateAssetsBody {
+export function generateOnePlan(entity: EntityRef, opts: { workflowId: number; inputValues?: InputValues; inputs?: readonly WorkflowInput[]; prompt?: string | null }): GenerateAssetsBody {
   const body: GenerateAssetsBody = {
     missing_only: false,
     asset_target: "sheet",
     workflow_id: opts.workflowId,
-    input_values: compactInputValues(opts.inputValues),
+    input_values: sendableInputValues(opts.inputs, opts.inputValues),
   };
   if (entity.kind === "character") {
     body.character_ids = [entity.id];

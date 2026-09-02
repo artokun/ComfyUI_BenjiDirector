@@ -1,0 +1,188 @@
+{
+ "1": {
+  "class_type": "PrimitiveStringMultiline",
+  "_meta": {
+   "title": "(Input:prompt) Prompt"
+  },
+  "inputs": {
+   "value": "studio reference sheet, neutral grey background, even lighting, full body, front view"
+  }
+ },
+ "2": {
+  "class_type": "PrimitiveStringMultiline",
+  "_meta": {
+   "title": "(Input:negative) Negative prompt"
+  },
+  "inputs": {
+   "value": "blurry, low quality, watermark, text, extra limbs, deformed"
+  }
+ },
+ "3": {
+  "class_type": "PrimitiveInt",
+  "_meta": {
+   "title": "(Input:width) Width"
+  },
+  "inputs": {
+   "value": 1024
+  }
+ },
+ "4": {
+  "class_type": "PrimitiveInt",
+  "_meta": {
+   "title": "(Input:height) Height"
+  },
+  "inputs": {
+   "value": 1024
+  }
+ },
+ "5": {
+  "class_type": "PrimitiveInt",
+  "_meta": {
+   "title": "(Input:seed) Seed"
+  },
+  "inputs": {
+   "value": 0
+  }
+ },
+ "10": {
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  },
+  "inputs": {
+   "unet_name": "krea2_turbo_fp8_scaled.safetensors",
+   "weight_dtype": "default"
+  }
+ },
+ "11": {
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  },
+  "inputs": {
+   "clip_name": "qwen3vl_4b_fp8_scaled.safetensors",
+   "type": "krea2",
+   "device": "default"
+  }
+ },
+ "12": {
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  },
+  "inputs": {
+   "vae_name": "qwen_image_vae.safetensors"
+  }
+ },
+ "20": {
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Positive"
+  },
+  "inputs": {
+   "clip": [
+    "11",
+    0
+   ],
+   "text": [
+    "1",
+    0
+   ]
+  }
+ },
+ "21": {
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Negative"
+  },
+  "inputs": {
+   "clip": [
+    "11",
+    0
+   ],
+   "text": [
+    "2",
+    0
+   ]
+  }
+ },
+ "22": {
+  "class_type": "EmptyLatentImage",
+  "_meta": {
+   "title": "Empty Latent"
+  },
+  "inputs": {
+   "width": [
+    "3",
+    0
+   ],
+   "height": [
+    "4",
+    0
+   ],
+   "batch_size": 1
+  }
+ },
+ "23": {
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  },
+  "inputs": {
+   "model": [
+    "10",
+    0
+   ],
+   "positive": [
+    "20",
+    0
+   ],
+   "negative": [
+    "21",
+    0
+   ],
+   "latent_image": [
+    "22",
+    0
+   ],
+   "seed": [
+    "5",
+    0
+   ],
+   "steps": 8,
+   "cfg": 1.0,
+   "sampler_name": "res_multistep",
+   "scheduler": "beta",
+   "denoise": 1.0
+  }
+ },
+ "24": {
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  },
+  "inputs": {
+   "samples": [
+    "23",
+    0
+   ],
+   "vae": [
+    "12",
+    0
+   ]
+  }
+ },
+ "25": {
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "(Output:image) Image"
+  },
+  "inputs": {
+   "images": [
+    "24",
+    0
+   ],
+   "filename_prefix": "benjidirector/asset"
+  }
+ }
+}

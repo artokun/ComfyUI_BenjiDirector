@@ -35,6 +35,7 @@ import "./WorkflowsPanel.jsx"; // U16
 import "./QueuePanel.jsx"; // U17
 import "./PlaygroundPanel.jsx"; // U18
 import "./Timeline.jsx"; import "./node-body.jsx"; import "./u21.drive.js"; // U21 — the dopesheet and the node bodies
+import "./u22.drive.js"; // U22 — starter workflows and asset generation
 // U19 (styles only)
 
 export interface MountOptions {

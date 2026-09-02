@@ -60,6 +60,9 @@ Args are a flat object. Ids come from `outline`. Positions are absolute canvas c
 | U21 | `set_duration` | `id`, `seconds` → `{id, durationSec}` |
 | U21 | `reorder_scene` | `id`, `to` — the CUT (`order_index`); `to` counts the film WITHOUT the moved scene |
 | U21 | `move_to_beat` | `id`, `beat` (a container id, or `null` for no Beat) |
+| U22 | `install_workflows` | — → registers the shipped workflows, resolving model names against this ComfyUI |
+| U22 | `workflows_status` | — → what is registered, and whether each starter's models are on this machine |
+| U22 | `generate_asset` | `id?` (a character/location/item node; omit for every one missing an image), `prompt?` |
 | U21 | `timeline` | — → `{duration, durationClock, mutedSec, cut[], rows[], clips[]}`, the dopesheet as data |
 
 Tool-side mapping (comfyui-mcp, U20): graph commands become `panel_director_graph` actions,

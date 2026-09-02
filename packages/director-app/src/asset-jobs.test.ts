@@ -21,6 +21,7 @@ import {
   workflowHasPromptInput,
   type AssetItemRow,
   type EntityLists,
+  sendableInputValues,
 } from "./asset-jobs.js";
 import { characterSheetTemplate, itemReferenceTemplate, locationReferenceTemplate } from "./prompt-templates.js";
 
@@ -255,5 +256,51 @@ describe("prompts", () => {
     // Calliope's own quirk, ported deliberately: a whitespace-only name is TRUTHY, so it trims
     // to empty instead of falling back to "Unnamed item". Parity with the backend beats tidiness.
     expect(itemReferenceTemplate({ name: "  ", description: null }).startsWith("ITEM REFERENCE — \n")).toBe(true);
+  });
+});
+
+describe("sendableInputValues", () => {
+  // The regression this exists for, measured on the rig: the Assets panel HIDES the prompt role
+  // (the card writes it from the entity's template) but the form still seeds every default, so
+  // the workflow's own default prompt went out in `input_values`. That is an explicit override
+  // and outranks the prompt Calliope derived — a character and a location rendered the same
+  // picture, and since both graphs were then byte-identical ComfyUI's cache handed back the
+  // same FILE for both rows.
+  const schema = [
+    { nodeId: "1", label: "Prompt", role: "prompt", kind: "textarea", required: true },
+    { nodeId: "2", label: "Negative prompt", role: "negative", kind: "textarea", required: true },
+    { nodeId: "3", label: "Width", role: "width", kind: "number", required: true },
+    { nodeId: "5", label: "Seed", role: "seed", kind: "number", required: true },
+  ] as unknown as WorkflowInput[];
+
+  it("drops a value whose role the form hid, and keeps everything the form showed", () => {
+    const values = { "1": "studio reference sheet, neutral grey background", "2": "blurry, watermark", "3": 1024, "5": 0 };
+    expect(sendableInputValues(schema, values)).toEqual({ "3": 1024, "5": 0 });
+  });
+
+  it("still strips blanks, so an empty field cannot wipe Calliope's smart-fill", () => {
+    expect(sendableInputValues(schema, { "3": 1024, "5": null, "9": "   " })).toEqual({ "3": 1024 });
+  });
+
+  it("sends everything when nothing is hidden — a caller that owns no role owns no exception", () => {
+    expect(sendableInputValues(schema, { "1": "a prompt", "3": 512 }, [])).toEqual({ "1": "a prompt", "3": 512 });
+  });
+
+  it("without a schema it cannot tell which node is the prompt, so it sends what it was given", () => {
+    expect(sendableInputValues(undefined, { "1": "a prompt" })).toEqual({ "1": "a prompt" });
+  });
+});
+
+describe("generateAllMissingPlan and the hidden prompt", () => {
+  it("does not put the workflow's own prompt in the body it sends", () => {
+    const schema = [{ nodeId: "1", label: "Prompt", role: "prompt", kind: "textarea", required: true }, { nodeId: "3", label: "Width", role: "width", kind: "number", required: true }] as unknown as WorkflowInput[];
+    const lists = { characters: [{ id: 1, name: "Nadia" }], locations: [{ id: 1, name: "Rooftop" }], items: [] } as unknown as EntityLists;
+    const perKind = {
+      character: { workflowId: 7, inputValues: { "1": "the workflow default", "3": 1024 }, inputs: schema },
+      location: { workflowId: 7, inputValues: { "1": "the workflow default", "3": 1024 }, inputs: schema },
+    };
+    const plan = generateAllMissingPlan(lists, 7, perKind);
+    expect(plan[0]?.input_values).toEqual({ "3": 1024 });
+    expect(plan[1]?.input_values).toEqual({ "3": 1024 });
   });
 });

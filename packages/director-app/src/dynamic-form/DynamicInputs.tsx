@@ -68,6 +68,12 @@ export function DynamicInputs({ inputs, values, onChange, assetOptions = [], all
 
   const prompt = zones.prompt?.input;
   const negative = zones.negative?.input;
+  // [U22] There are two reasons this form shows no prompt box, and they mean opposite things.
+  // The workflow may genuinely have no `(Input:prompt)` node — then the wording it renders with
+  // is its own. Or the CALLER hid the role because it owns the prompt (the Assets panel writes
+  // it from the card's template). Telling a user their workflow has no prompt node when it has
+  // one sends them to check a workflow that is fine.
+  const promptHidden = hideRoles.includes("prompt") && inputs.some((i) => i.role === "prompt");
 
   return (
     <div className="bd-dyn bd-rc-form">
@@ -108,7 +114,11 @@ export function DynamicInputs({ inputs, values, onChange, assetOptions = [], all
           }}
         />
       ) : (
-        <div className="bd-hint bd-rc-noprompt">This workflow has no (Input:prompt) node — the prompt is written by the workflow itself.</div>
+        <div className="bd-hint bd-rc-noprompt">
+          {promptHidden
+            ? "The prompt comes from the card above — this workflow's (Input:prompt) node receives it."
+            : "This workflow has no (Input:prompt) node — the prompt is written by the workflow itself."}
+        </div>
       )}
 
       {negative ? (
