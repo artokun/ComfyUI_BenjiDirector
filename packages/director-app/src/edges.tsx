@@ -64,10 +64,10 @@ export function DirectorEdge(props: EdgeProps) {
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <circle r={9} fill="#1e1e26" stroke={stroke} strokeWidth={2} />
-        <text y={4} textAnchor="middle" fontSize={12} fontWeight={700} fill={stroke}>
-          ⋯
-        </text>
+        <circle r={9} fill="#171717" stroke={stroke} strokeWidth={1.5} />
+        <circle cx={-3.5} cy={0} r={1.1} fill={stroke} />
+        <circle cx={0} cy={0} r={1.1} fill={stroke} />
+        <circle cx={3.5} cy={0} r={1.1} fill={stroke} />
       </g>
       {open ? (
         <EdgeLabelRenderer>
@@ -83,7 +83,7 @@ export function DirectorEdge(props: EdgeProps) {
                 actions?.insertOnEdge(edgeId, { x: labelX, y: labelY });
               }}
             >
-              ＋ Insert node
+              <Icon name="plus" /> Insert node
             </button>
             <button
               type="button"
@@ -93,7 +93,7 @@ export function DirectorEdge(props: EdgeProps) {
                 actions?.deleteEdge(edgeId);
               }}
             >
-              ✕ Delete
+              <Icon name="trash" /> Delete
             </button>
             <button
               type="button"

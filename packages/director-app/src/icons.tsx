@@ -7,6 +7,7 @@ import type { CSSProperties } from "react";
 
 const P: Record<string, string> = {
   plus: "M12 5v14M5 12h14",
+  minus: "M5 12h14",
   x: "M18 6 6 18M6 6l12 12",
   check: "M20 6 9 17l-5-5",
   trash: "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6",
