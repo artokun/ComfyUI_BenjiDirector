@@ -81,6 +81,7 @@ export function blueprintIdFromName(name: string, existing: Record<string, Bluep
 function cleanData(d: DirectorData): DirectorData {
   const copy = { ...d } as DirectorData & Record<string, unknown>;
   delete copy.faces;
+  delete copy.proxies;
   delete copy.inSubgraph;
   if (copy.kind === "beat") {
     // Rails are rebuilt from the wires on instantiate.

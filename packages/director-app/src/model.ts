@@ -117,10 +117,26 @@ export interface PromotedFace {
   assetKind?: AssetData["asset"];
 }
 
+/**
+ * [U6] A handle on a COLLAPSED container that stands in for a hidden descendant's port, so a
+ * wire crossing the boundary has somewhere to land. `id` is derived —
+ * `${containerId}::proxy:${childPortId}` (collapse-view's `proxyHandleId`) — never minted.
+ */
+export interface ProxyHandle {
+  id: string;
+  childId: string;
+  childPortId: string;
+  side: "in" | "out";
+  type: string;
+  label: string;
+}
+
 export interface BeatData extends BaseNodeData, ContainerNodeData {
   kind: "beat";
   /** Derived every settle from pinned descendants — never edited directly. */
   faces?: PromotedFace[];
+  /** [U6] Derived every settle while collapsed, from the wires crossing the boundary — never edited directly. */
+  proxies?: ProxyHandle[];
   /** The expanded box, remembered while collapsed so expanding restores it. */
   expandedWidth?: number;
   expandedHeight?: number;
