@@ -48,6 +48,7 @@ export function summarizeNode(n: RFNode): Record<string, unknown> {
         inSubgraph: !!d.inSubgraph,
         bypassed: !!d.bypassed,
         color: d.color ?? null,
+        collapsed: !!d.collapsed,
         imagePath: d.imagePath ?? null,
         ports: d.ports.map((p) => ({ id: p.id, type: p.type, isInput: p.isInput, label: p.label })),
       };

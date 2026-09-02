@@ -15,23 +15,23 @@ import "./styles.css";
 import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 // ── feature modules register panels, slots and drive commands on import; one line per unit ──
 // U1 (stability: nothing to import)
-// U2 import "./node-chrome.jsx";
+import "./node-chrome.jsx";
 // U3 import "./useEditorHotkeys.js"; import "./help.jsx";
 // U4 import "./sidebar.jsx"; import "./persistence.js";
 // U5 import "./container-delete.jsx";
 // U6 (collapse-view.ts is imported by DirectorApp)
-// U7 import "./blueprint-modal.jsx";
+import "./blueprint-modal.jsx"; // U7
 // U8a import "./selection-toolbar.jsx";
 // U8b import "./reroute.jsx";
 // U9 import "./note-node.jsx";
 // U10 import "./JobStrip.jsx";
-// U11 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx";
+import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
 // U12 import "./Inspector.jsx";
 // U13 (calliope-sync.ts is imported by DirectorApp)
 // U14 import "./AssetsPanel.jsx";
 // U15 import "./RenderPanel.jsx";
 // U16 import "./WorkflowsPanel.jsx";
-// U17 import "./QueuePanel.jsx";
+import "./QueuePanel.jsx"; // U17
 // U18 import "./PlaygroundPanel.jsx";
 // U19 (styles only)
 

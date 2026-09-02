@@ -50,11 +50,13 @@ import { applyIntents, diffForCalliope } from "./calliope-sync.js";
 import { applyTopology, captureTopology, loadTopology, saveTopology, type RailLabels } from "./topology.js";
 import { ActionsContext, type EditorActions } from "./actions.js";
 import {
-  blueprintIdFromName,
-  instantiateBlueprint,
+  blueprintDialogs,
+  blueprintVersion,
+  deleteBlueprint as deleteStoredBlueprint,
   loadBlueprints,
   serializeSubtree,
-  writeBlueprints,
+  stampBlueprint,
+  storeBlueprint,
   type Blueprint,
 } from "./blueprints.js";
 import { EdgeActionsContext, edgeTypes, type EdgeActions } from "./edges.jsx";
@@ -84,6 +86,9 @@ import { summarizeEdge, summarizeNode } from "./outline.js";
 import { usePanels } from "./panels.js";
 import { Slot } from "./slots.jsx";
 import { PALETTE_KINDS } from "./model.js";
+// ── [U1] stability: measurement kick + z-order ──
+import { KICK_INTERVAL_MS, KICK_MAX_TICKS, unmeasuredIds, visibleIdKey } from "./stability.js";
+import { applyZOrder, needsZOrder } from "./z-order.js";
 
 // React Flow types node data as an index signature; ours are interfaces. Identical at runtime,
 // so the casts stay confined to these aliases.
@@ -309,51 +314,83 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   const { screenToFlowPosition, getInternalNode } = useReactFlow();
 
   /**
-   * Force React Flow to measure.
+   * Force React Flow to measure — only what it CAN measure, and only until it has.
    *
    * The pane mounts inside the side panel's overlay while it is sliding in, and React Flow's
    * own ResizeObserver pass does not land in that window: nodes keep `visibility: hidden`
    * (its marker for "not measured"), and because an edge only renders once BOTH endpoints are
    * measured, the canvas comes up with nodes you cannot see and no wires at all.
    * `updateNodeInternals` re-reads dimensions and handle bounds straight from the DOM.
+   *
+   * [U1] Keyed on the SET of visible ids, not the node list. React Flow never measures a
+   * hidden node, so a kick that waited for EVERY node to report a size could not finish while
+   * a Beat was collapsed — and it re-armed on each node-list change: a 60 s interval that
+   * force-remeasured every node and every handle on the canvas, which is what "dragging locks
+   * the tab up" was. Now nothing is armed when everything visible is already measured, a kick
+   * names only the unmeasured nodes, and everything stops the moment the last one measures.
    */
   const updateNodeInternals = useUpdateNodeInternals();
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const nodeIds = useMemo(() => (nodes as RFNode[]).map((n) => n.id).join(","), [nodes]);
+  const visibleIds = useMemo(() => visibleIdKey(nodes as RFNode[]), [nodes]);
   useEffect(() => {
-    const ids = nodeIds ? nodeIds.split(",") : [];
+    const ids = visibleIds ? visibleIds.split(",") : [];
     if (!ids.length) return undefined;
-    const kick = () => updateNodeInternals(ids);
-    // A hidden tab suspends ResizeObserver entirely, so the fixed timers below can all fire
-    // into a tab nothing will measure. Keep nudging on a slow interval until every node
-    // reports a size, and again the moment the tab becomes visible — bounded, so a node that
-    // genuinely cannot measure does not keep a timer alive forever.
-    const allMeasured = () => ids.every((id) => !!getInternalNode(id)?.measured?.width);
-    let tries = 0;
-    const iv = setInterval(() => {
-      if (allMeasured() || tries++ > 120) {
-        clearInterval(iv);
-        return;
-      }
-      kick();
-    }, 500);
+    const isMeasured = (id: string) => !!getInternalNode(id)?.measured?.width;
+    const pending = () => unmeasuredIds(ids, isMeasured);
+    if (!pending().length) return undefined;
+    let stopped = false;
+    let ticks = 0;
+    let raf = 0;
+    let iv: ReturnType<typeof setInterval> | undefined;
+    let ro: ResizeObserver | null = null;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     const onVisible = () => {
       if (document.visibilityState === "visible") kick();
     };
-    document.addEventListener("visibilitychange", onVisible);
-    const raf = requestAnimationFrame(kick);
-    const timers = [setTimeout(kick, 120), setTimeout(kick, 400), setTimeout(kick, 900)];
-    const el = canvasRef.current;
-    const ro = el ? new ResizeObserver(() => kick()) : null;
-    if (el && ro) ro.observe(el);
-    return () => {
-      clearInterval(iv);
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      if (iv !== undefined) clearInterval(iv);
       document.removeEventListener("visibilitychange", onVisible);
       cancelAnimationFrame(raf);
       for (const t of timers) clearTimeout(t);
       ro?.disconnect();
     };
-  }, [getInternalNode, nodeIds, updateNodeInternals]);
+    const kick = () => {
+      if (stopped) return;
+      const left = pending();
+      if (!left.length) {
+        stop();
+        return;
+      }
+      updateNodeInternals(left);
+    };
+    raf = requestAnimationFrame(kick);
+    timers.push(setTimeout(kick, 120), setTimeout(kick, 400), setTimeout(kick, 900));
+    // A hidden tab suspends ResizeObserver entirely, so the fixed timers above can all fire
+    // into a tab nothing will measure. Keep nudging on a slow interval, and again the moment
+    // the tab becomes visible — bounded, so a node that genuinely cannot measure does not
+    // keep a timer alive forever.
+    iv = setInterval(() => {
+      if (++ticks > KICK_MAX_TICKS) stop();
+      else kick();
+    }, KICK_INTERVAL_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    const el = canvasRef.current;
+    ro = el ? new ResizeObserver(() => kick()) : null;
+    if (el && ro) ro.observe(el);
+    return stop;
+  }, [getInternalNode, visibleIds, updateNodeInternals]);
+
+  // [U1] Z-order (z-order.ts): containers pinned below the wires, leaves above. Constructors
+  // stamp it; this heals whatever arrives without it — a blueprint, an imported graph — once,
+  // in state, so React Flow and the outline agree. View state, so it does not go through
+  // settle: nothing about the graph changes, only who paints over whom.
+  useEffect(() => {
+    if (needsZOrder(nodes as RFNode[])) setNodes((ns) => applyZOrder(ns as RFNode[]));
+  }, [nodes, setNodes]);
+  const bumpZ = useCallback((id: string) => setNodes((ns) => applyZOrder(ns as RFNode[], id)), [setNodes]);
+  const onNodeClick = useCallback((_e: unknown, node: Node) => bumpZ(node.id), [bumpZ]);
 
   const config = useMemo(() => resolveConfig(calliopeBaseUrl ? { baseUrl: calliopeBaseUrl } : {}), [calliopeBaseUrl]);
   const client = useMemo(() => new CalliopeClient(config), [config]);
@@ -561,11 +598,15 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   }, []);
   const settleRef = useRef(settle);
   settleRef.current = settle;
-  const onNodeDragStop = useCallback(() => {
-    const prev = dragBaseline.current ?? undefined;
-    dragBaseline.current = null;
-    withCurrent((ns, es) => settle(ns, es, { prev }), { history: false });
-  }, [settle, withCurrent]);
+  const onNodeDragStop = useCallback(
+    (_e: unknown, node: Node) => {
+      const prev = dragBaseline.current ?? undefined;
+      dragBaseline.current = null;
+      // [U1] The dropped leaf rises to the top of the stack (z-order.ts); a Beat stays pinned.
+      withCurrent((ns, es) => settle(applyZOrder(ns, node.id), es, { prev }), { history: false });
+    },
+    [settle, withCurrent],
+  );
 
   /**
    * Load a Calliope project onto the canvas.
@@ -858,15 +899,55 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     (bp: Blueprint, at: { x: number; y: number }) => {
       setPalette(null);
       withCurrent((ns, es) => {
-        const inst = instantiateBlueprint(bp, at);
-        const merged = [...ns, ...asRF(inst.nodes)];
-        const mergedEdges = [...es, ...asRFEdges(inst.edges)];
-        if (inst.promote) {
-          const out = promoteToSubgraph(inst.rootId, asCore(merged), asCoreEdges(mergedEdges), directorHost);
-          settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
-        } else settle(merged, mergedEdges, { reparent: false });
+        // Promotion, pinned rails, blueprint linkage and selection all happen in the stamp;
+        // settle's reconcile then wires the pinned rails' relays.
+        const out = stampBlueprint(bp, at, asCore(ns), asCoreEdges(es));
+        settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
         setNote(`placed blueprint “${bp.label}”`);
       });
+    },
+    [settle, withCurrent],
+  );
+
+  /**
+   * [U7] Put a container into the library — as a new blueprint, or as the next version of
+   * `into` — and link the container to what was stored.
+   */
+  const commitBlueprint = useCallback(
+    (containerId: string, name: string, into?: string): Blueprint | undefined => {
+      const all = nodesRef.current as RFNode[];
+      const target = all.find((n) => n.id === containerId);
+      // The dialog is async: the Beat can be gone by the time the user hits Save.
+      if (!target || !isContainer(target)) {
+        setNote(`no Beat “${containerId}” to save — it may have been deleted`);
+        return undefined;
+      }
+      // Store the LOGICAL wiring: rails are derived, so a saved subgraph is dissolved first
+      // and re-promoted on placement through the same algebra that built it. The rails
+      // themselves travel as the blueprint's interface, read from the graph BEFORE dissolve.
+      const wasSubgraph = target.type === SUBGRAPH_TYPE;
+      const logical = wasSubgraph
+        ? dissolveSubgraph(containerId, asCore(all), asCoreEdges(edgesRef.current))
+        : { nodes: asCore(all), edges: asCoreEdges(edgesRef.current) };
+      let bp: Blueprint;
+      try {
+        bp = storeBlueprint(serializeSubtree(containerId, logical.nodes, logical.edges, wasSubgraph, asCore(all)), name, into);
+      } catch (err) {
+        setNote(err instanceof Error ? err.message : String(err));
+        return undefined;
+      }
+      setBlueprints(loadBlueprints());
+      withCurrent(
+        (ns, es) =>
+          settle(
+            ns.map((n) => (n.id === containerId ? ({ ...n, data: { ...n.data, blueprintId: bp.id, blueprintVersion: blueprintVersion(bp) } } as RFNode) : n)),
+            es,
+            { reparent: false },
+          ),
+        { history: false },
+      );
+      setNote(into ? `updated blueprint “${bp.label}” — v${blueprintVersion(bp)}` : `saved blueprint “${bp.label}”`);
+      return bp;
     },
     [settle, withCurrent],
   );
@@ -1029,17 +1110,78 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         );
       },
       // [U0] stubs — each unit replaces its own method body. Keep the note text; tests grep it.
-      setBypassed: () => setNote("not implemented yet [U2] setBypassed"),
-      setNodeColor: () => setNote("not implemented yet [U2] setNodeColor"),
-      setNodeCollapsed: () => setNote("not implemented yet [U2] setNodeCollapsed"),
-      deleteNode: () => setNote("not implemented yet [U2] deleteNode"),
+      // [U2] leaf chrome — leaves only; a Beat has its own verbs (setColor, toggleCollapse, deleteContainer).
+      setBypassed(nodeId, bypassed) {
+        withCurrent((ns, es) => settle(ns.map((n) => (n.id === nodeId && !isContainer(n) ? ({ ...n, data: { ...n.data, bypassed } } as RFNode) : n)), es, { reparent: false }));
+      },
+      setNodeColor(nodeId, color) {
+        // Clearing REMOVES the key rather than storing `undefined`, so the swatch's "no tint"
+        // and the agent's `set_node_color {color: null}` leave a node in the same shape.
+        withCurrent((ns, es) =>
+          settle(
+            ns.map((n) => {
+              if (n.id !== nodeId || isContainer(n)) return n;
+              const data = { ...n.data } as Record<string, unknown>;
+              if (color) data.color = color;
+              else delete data.color;
+              return { ...n, data } as RFNode;
+            }),
+            es,
+            { reparent: false },
+          ),
+        );
+      },
+      setNodeCollapsed(nodeId, collapsed) {
+        withCurrent((ns, es) => settle(ns.map((n) => (n.id === nodeId && !isContainer(n) ? ({ ...n, data: { ...n.data, collapsed } } as RFNode) : n)), es, { reparent: false }));
+      },
+      deleteNode(nodeId) {
+        withCurrent((ns, es) => {
+          const target = ns.find((n) => n.id === nodeId);
+          if (!target || isContainer(target)) return;
+          setNote(`deleted ${target.data.label}`);
+          settle(ns.filter((n) => n.id !== nodeId), es.filter((e) => e.source !== nodeId && e.target !== nodeId), { reparent: false });
+        });
+      },
       duplicate: () => {
         setNote("not implemented yet [U3] duplicate");
         return [];
       },
       deleteContainer: () => setNote("not implemented yet [U5] deleteContainer"),
-      updateBlueprint: () => setNote("not implemented yet [U7] updateBlueprint"),
-      deleteBlueprint: () => setNote("not implemented yet [U7] deleteBlueprint"),
+      updateBlueprint(blueprintId, containerId) {
+        const bp = loadBlueprints()[blueprintId];
+        if (!bp) return setNote(`no blueprint “${blueprintId}”`);
+        if (bp.builtin) return setNote(`“${bp.label}” ships with the editor — save a copy under a new name`);
+        const all = nodesRef.current as RFNode[];
+        const linked = all.filter((n) => isContainer(n) && rails(n).blueprintId === blueprintId);
+        const target = containerId ? all.find((n) => n.id === containerId) : linked.length === 1 ? linked[0] : undefined;
+        if (!target || !isContainer(target)) {
+          return setNote(
+            containerId
+              ? `“${containerId}” is not a Beat`
+              : linked.length
+                ? `${linked.length} Beats are linked to “${bp.label}” — select the one to update from`
+                : `no Beat on the canvas is linked to “${bp.label}”`,
+          );
+        }
+        commitBlueprint(target.id, bp.label, blueprintId);
+        return undefined;
+      },
+      deleteBlueprint(blueprintId, opts) {
+        const bp = loadBlueprints()[blueprintId];
+        if (!bp) return setNote(`no blueprint “${blueprintId}”`);
+        if (bp.builtin) return setNote(`“${bp.label}” ships with the editor and cannot be deleted`);
+        const go = () => {
+          if (!deleteStoredBlueprint(blueprintId)) return setNote(`could not delete “${bp.label}”`);
+          setBlueprints(loadBlueprints());
+          setNote(`deleted blueprint “${bp.label}”`);
+          return undefined;
+        };
+        if (opts?.confirm === false) return go();
+        const dlg = blueprintDialogs();
+        if (!dlg) return setNote("the blueprint dialog is not mounted");
+        void dlg.confirmDelete(bp).then((ok) => ok && go());
+        return undefined;
+      },
       setNoteText: () => setNote("not implemented yet [U9] setNoteText"),
       togglePin(nodeId) {
         withCurrent((ns, es) => {
@@ -1080,41 +1222,33 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         });
       },
       saveBlueprint(containerId, presetName) {
-        const all = nodesRef.current as RFNode[];
-        const target = all.find((n) => n.id === containerId);
+        const target = (nodesRef.current as RFNode[]).find((n) => n.id === containerId);
         if (!target || !isContainer(target)) return;
-        const name = (presetName ?? window.prompt("Blueprint name", target.data.label) ?? "").trim();
-        if (!name) return;
-        // Store the LOGICAL wiring: rails are derived, so a saved subgraph is dissolved first
-        // and re-promoted on placement through the same algebra that built it.
-        const wasSubgraph = target.type === SUBGRAPH_TYPE;
-        const logical = wasSubgraph
-          ? dissolveSubgraph(containerId, asCore(all), asCoreEdges(edgesRef.current))
-          : { nodes: asCore(all), edges: asCoreEdges(edgesRef.current) };
-        const existing = loadBlueprints();
-        const linked = rails(target).blueprintId && existing[rails(target).blueprintId!] ? rails(target).blueprintId! : undefined;
-        const id = linked ?? blueprintIdFromName(name, existing);
-        const bp: Blueprint = { id, label: name, savedAt: Date.now(), ...serializeSubtree(containerId, logical.nodes, logical.edges, wasSubgraph) };
-        const next = { ...existing, [id]: bp };
-        writeBlueprints(next);
-        setBlueprints(next);
-        withCurrent(
-          (ns, es) =>
-            settle(
-              ns.map((n) =>
-                n.id === containerId
-                  ? ({ ...n, data: { ...n.data, blueprintId: id, blueprintVersion: (rails(n).blueprintVersion ?? 0) + 1 } } as RFNode)
-                  : n,
-              ),
-              es,
-              { reparent: false },
-            ),
-          { history: false },
-        );
-        setNote(linked ? `updated blueprint “${name}”` : `saved blueprint “${name}”`);
+        const bid = rails(target).blueprintId;
+        const prior = bid ? loadBlueprints()[bid] : undefined;
+        // Linked to a blueprint that still exists and is the user's: a save may UPDATE it. A
+        // built-in it was placed from is not updatable, so that link only informs the dialog.
+        const linked = prior && !prior.builtin ? prior : undefined;
+        if (presetName !== undefined) {
+          // The agent's path: a name, no dialog. Re-saves the linked blueprint when there is one.
+          const name = presetName.trim();
+          if (name) commitBlueprint(containerId, name, linked?.id);
+          return;
+        }
+        const dlg = blueprintDialogs();
+        if (!dlg) return setNote("the blueprint dialog is not mounted");
+        void dlg
+          .save({
+            defaultName: linked?.label ?? target.data.label,
+            ...(prior ? { linked: { id: prior.id, label: prior.label, version: blueprintVersion(prior), builtin: !!prior.builtin } } : {}),
+          })
+          .then((r) => {
+            if (r) commitBlueprint(containerId, r.name, r.mode === "update" && linked ? linked.id : undefined);
+          });
+        return undefined;
       },
     }),
-    [convert, settle, withCurrent],
+    [commitBlueprint, convert, settle, withCurrent],
   );
 
   const edgeActions: EdgeActions = useMemo(
@@ -1464,20 +1598,15 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
             return { id: target.id, name: args.name };
           }, { history: false });
         case "list_blueprints":
-          return Object.values(loadBlueprints()).map((b) => ({ id: b.id, label: b.label, nodes: b.nodes.length, savedAt: b.savedAt }));
+          return Object.values(loadBlueprints()).map((b) => ({ id: b.id, label: b.label, nodes: b.nodes.length, savedAt: b.savedAt, version: blueprintVersion(b), builtin: !!b.builtin }));
         case "apply_blueprint": {
           const bp = loadBlueprints()[str(args.blueprint_id, "blueprint_id")];
           if (!bp) throw new Error(`no blueprint "${String(args.blueprint_id)}" — list_blueprints names them`);
           const at = { x: num(args.x, "x"), y: num(args.y, "y") };
           return run((ns, es) => {
-            const inst = instantiateBlueprint(bp, at);
-            const merged = [...ns, ...asRF(inst.nodes)];
-            const mergedEdges = [...es, ...asRFEdges(inst.edges)];
-            if (inst.promote) {
-              const out = promoteToSubgraph(inst.rootId, asCore(merged), asCoreEdges(mergedEdges), directorHost);
-              settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
-            } else settle(merged, mergedEdges, { reparent: false });
-            return { id: inst.rootId, blueprint: bp.id };
+            const out = stampBlueprint(bp, at, asCore(ns), asCoreEdges(es));
+            settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
+            return { id: out.rootId, blueprint: bp.id, version: blueprintVersion(bp) };
           });
         }
         default: {
@@ -1600,21 +1729,6 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
               <Slot name="toolbar-left" />
               <span className="bd-spacer" />
               <Slot name="toolbar-right" />
-              {status?.reachable ? (
-                <select
-                  className="bd-project"
-                  value={loadedProject ?? ""}
-                  title="Which Calliope project the canvas shows"
-                  onChange={(e) => void loadProject(e.target.value === "" ? null : Number(e.target.value))}
-                >
-                  <option value="">demo project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
               {loadedProject !== null ? (
                 <span className={`bd-sync is-${syncState}`} title="Write-back to Calliope">
                   {syncState === "saving" ? "saving…" : syncState === "saved" ? "saved" : syncState === "error" ? "save failed" : "synced"}
@@ -1651,7 +1765,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                 nodes={nodes}
                 edges={displayedEdges}
                 onSelectionChange={onSelectionChange}
-                elevateNodesOnSelect={true /* [U1] false + zIndex convention */}
+                elevateNodesOnSelect={false /* [U1] z-order.ts owns the stack: containers -1, leaves bumped on click/drag/spawn */}
+                onNodeClick={onNodeClick}
                 snapToGrid={false /* [U8a] */}
                 snapGrid={[18, 18]}
                 onNodesChange={onNodesChange}
