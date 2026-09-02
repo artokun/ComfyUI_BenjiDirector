@@ -20,7 +20,7 @@ export function summarizeNode(n: RFNode): Record<string, unknown> {
   };
   if (n.type === GROUP_TYPE || n.type === SUBGRAPH_TYPE) {
     const d = n.data as BeatData;
-    return { ...base, kind: "beat", collapsed: !!d.collapsed, color: d.color ?? null, promotedIn: d.promotedIn, promotedOut: d.promotedOut, faces: d.faces ?? [], blueprintId: d.blueprintId ?? null };
+    return { ...base, kind: "beat", collapsed: !!d.collapsed, color: d.color ?? null, promotedIn: d.promotedIn, promotedOut: d.promotedOut, faces: d.faces ?? [], proxies: d.proxies ?? [], blueprintId: d.blueprintId ?? null };
   }
   const d = n.data as SceneData | AssetData | NoteData | RerouteData;
   switch (d.kind) {

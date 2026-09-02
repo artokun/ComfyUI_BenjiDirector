@@ -23,6 +23,7 @@ import {
   type Connection,
   type ConnectionLineComponentProps,
   type Edge,
+  type EdgeChange,
   type FinalConnectionState,
   type Node,
 } from "@xyflow/react";
@@ -76,7 +77,7 @@ import {
 import { nodeTypes } from "./nodes.jsx";
 import { Palette, type PaletteItem } from "./palette.jsx";
 // ── [U0] foundation ──
-import { useDisplayedGraph } from "./collapse-view.js";
+import { canonicalEdgeChanges, proxyHandlesFor, useDisplayedGraph } from "./collapse-view.js";
 import { DirectorContext, type DirectorCtx } from "./director-context.jsx";
 import { resolveDrive, type DriveKit } from "./drive-registry.js";
 import { Icon } from "./icons.jsx";
@@ -117,16 +118,18 @@ function handleTypes(nodes: RFNode[]): Map<string, DirectorPortType> {
 
 /**
  * Colour each edge by what it carries, hide anything inside a collapsed Beat, derive each
- * container's face and each node's "inside a subgraph" flag.
+ * container's face, its proxy handles, and each node's "inside a subgraph" flag.
  *
- * A node is hidden when ANY ancestor is a collapsed subgraph — not just its direct parent, or
- * a Beat nested two deep would keep rendering its grandchildren on top of the collapsed card.
- * Edges follow their endpoints, which is what makes the inner relays disappear with the
- * children while the outer halves keep terminating on the collapsed card's rails.
+ * A node is hidden when ANY ancestor is a collapsed container — group or subgraph, not just
+ * its direct parent, or a Beat nested two deep would keep rendering its grandchildren on top of
+ * the collapsed card. Edges follow their endpoints in STATE, which is what makes a subgraph's
+ * inner relays disappear with the children while the outer halves keep terminating on the
+ * collapsed card's rails. A plain group has no rails, so its crossings are re-routed at DRAW
+ * time instead (`collapse-view`) onto the proxy handles derived here.
  */
 function decorate(nodes: RFNode[], edges: Edge[]): { nodes: RFNode[]; edges: Edge[] } {
   const byId = new Map(nodes.map((n) => [n.id, n] as const));
-  const collapsed = new Set(nodes.filter((n) => n.type === SUBGRAPH_TYPE && rails(n).collapsed).map((n) => n.id));
+  const collapsed = new Set(nodes.filter((n) => isContainer(n) && rails(n).collapsed).map((n) => n.id));
 
   const ancestorMatches = (n: RFNode, pred: (ancestor: RFNode) => boolean): boolean => {
     let p = n.parentId;
@@ -172,7 +175,14 @@ function decorate(nodes: RFNode[], edges: Edge[]): { nodes: RFNode[]; edges: Edg
         const g = faces[i];
         return !!g && f.id === g.id && f.label === g.label && f.durationSec === g.durationSec && f.videoPath === g.videoPath;
       });
-    return same ? n : ({ ...n, data: { ...n.data, faces } } as RFNode);
+    // A collapsed card's proxy handles: one per hidden descendant port with a wire to the
+    // outside. Derived from the canonical edges, so the card always carries exactly the
+    // handles `displayedEdges` will re-route onto. A card hidden inside another collapsed
+    // container draws nothing, so it needs none.
+    const proxies = collapsed.has(n.id) && !n.hidden ? proxyHandlesFor(n.id, outNodes0, edges) : [];
+    const prevP = rails(n).proxies ?? [];
+    const sameP = prevP.length === proxies.length && prevP.every((p, i) => p.id === proxies[i]?.id && p.type === proxies[i]?.type && p.label === proxies[i]?.label);
+    return same && sameP ? n : ({ ...n, data: { ...n.data, faces, proxies } } as RFNode);
   });
 
   const hidden = new Set(outNodes.filter((n) => n.hidden).map((n) => n.id));
@@ -1185,7 +1195,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       toggleCollapse(containerId) {
         withCurrent((ns, es) => {
           const next = ns.map((n) => {
-            if (n.id !== containerId || n.type !== SUBGRAPH_TYPE) return n;
+            // Any Beat collapses: a subgraph to its rails, a plain group to its proxies.
+            if (n.id !== containerId || !isContainer(n)) return n;
             const d = rails(n);
             const collapsing = !d.collapsed;
             // The expanded box and the collapsed card are two different sizes. React Flow's
@@ -1464,7 +1475,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         case "set_collapsed":
           return run((ns, es) => {
             const target = find(ns, args.id);
-            if (target.type !== SUBGRAPH_TYPE) throw new Error("only a subgraph collapses — promote the Beat first");
+            if (!isContainer(target)) throw new Error(`"${target.id}" is not a Beat — only a Beat collapses`);
             const want = !!args.collapsed;
             if (!!rails(target).collapsed !== want) queueMicrotask(() => actions.toggleCollapse(target.id));
             return { id: target.id, collapsed: want };
@@ -1665,6 +1676,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   const dockPanels = panelDefs.filter((p) => p.placement === "dock");
   const activeTab = activePanel !== "canvas" ? tabPanels.find((p) => p.id === activePanel) : undefined;
   const displayedEdges = useDisplayedGraph(nodes as RFNode[], edges);
+  // [U6] React Flow names the DISPLAYED edge in the changes it emits; state holds the canonical one.
+  const onDisplayedEdgesChange = useCallback((changes: EdgeChange[]) => onEdgesChange(canonicalEdgeChanges(changes)), [onEdgesChange]);
   const onSelectionChange = useCallback(({ nodes: sel }: { nodes: Node[] }) => {
     const ids = sel.map((n) => n.id);
     setSelectedIds((cur) => (cur.length === ids.length && cur.every((id, i) => id === ids[i]) ? cur : ids));
@@ -1757,7 +1770,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                 snapToGrid={false /* [U8a] */}
                 snapGrid={[18, 18]}
                 onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
+                onEdgesChange={onDisplayedEdgesChange}
                 onNodeDragStart={onNodeDragStart}
                 onNodeDragStop={onNodeDragStop}
                 onConnect={onConnect}

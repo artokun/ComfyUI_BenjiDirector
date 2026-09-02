@@ -27,10 +27,12 @@ import {
   Handle,
   NodeResizer,
   Position,
+  useStore,
   useUpdateNodeInternals,
   type NodeProps,
+  type ReactFlowState,
 } from "@xyflow/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { emptySlotHandle, innerHandleId, type BoundaryPort } from "@benjidirector/graph-core";
 import { useActions } from "./actions.js";
 import { FaceRow } from "./faces.jsx";
@@ -45,6 +47,7 @@ import {
   type AssetData,
   type BeatData,
   type DirectorPortType,
+  type ProxyHandle,
   type SceneData,
 } from "./model.js";
 
@@ -212,10 +215,101 @@ function EditableTitle({ id, label }: { id: string; label: string }) {
   );
 }
 
-/** An un-promoted Beat: a box you drag scenes into. No rails yet, by definition. */
+/** How many nodes a container holds, at any depth — what its collapsed card says it hides. */
+function countInside(containerId: string, nodes: readonly { id: string; parentId?: string }[]): number {
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  let count = 0;
+  for (const n of nodes) {
+    let p = n.parentId;
+    const seen = new Set<string>();
+    while (p && !seen.has(p)) {
+      if (p === containerId) {
+        count += 1;
+        break;
+      }
+      seen.add(p);
+      p = byId.get(p)?.parentId;
+    }
+  }
+  return count;
+}
+
+/**
+ * An un-promoted Beat.
+ *
+ * Expanded, a box you drag scenes into — no rails, by definition. Collapsed, the same header
+ * card a subgraph collapses to, except that what lands on its hubs is PROXY handles: one per
+ * hidden child port that has a wire to the outside (`collapse-view` derives them, `decorate`
+ * stores them on `data.proxies`), stacked on the hub the way rails are. A group has no
+ * boundary algebra, so a proxy is the only way a wire into a collapsed group can be drawn;
+ * it cannot be wired to — the port it fronts is the one to wire, once the group is open.
+ */
 export function GroupNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as BeatData;
+  const collapsed = !!d.collapsed;
+  const actions = useActions();
+  const updateInternals = useUpdateNodeInternals();
   const tint = d.color ?? ACCENT;
+  const proxies = d.proxies ?? [];
+  const proxyKey = proxies.map((p) => p.id).join("|");
+
+  // Same reasoning as SubgraphNode: the handles move when the card collapses or its proxy set
+  // changes, and React Flow only re-measures when told.
+  useEffect(() => {
+    updateInternals(id);
+  }, [id, collapsed, proxyKey, updateInternals]);
+
+  const inside = useStore(useCallback((s: ReactFlowState) => countInside(id, s.nodes), [id]));
+
+  const caret = (
+    <button
+      type="button"
+      className="bd-caret nodrag"
+      title={collapsed ? "Expand" : "Collapse"}
+      onClick={(e) => {
+        e.stopPropagation();
+        actions?.toggleCollapse(id);
+      }}
+    >
+      <Icon name={collapsed ? "chevronRight" : "chevronDown"} size={12} />
+    </button>
+  );
+
+  if (collapsed) {
+    // Nothing is pinned inside a plain group (pins are a subgraph's face), so the card is always
+    // a pill: one header, hubs at both edges, the proxies stacked on them.
+    const ins = proxies.filter((p) => p.side === "in");
+    const outs = proxies.filter((p) => p.side === "out");
+    return (
+      <div
+        className={`bd-collapsed bd-collapsed-group is-pill${selected ? " is-selected" : ""}`}
+        style={{ width: "100%", height: "auto", borderColor: tint, background: `color-mix(in srgb, ${tint} 10%, #1e1e26)` }}
+      >
+        {/* Width only, as on the subgraph card: the card is content-height by definition. */}
+        <NodeResizer
+          minWidth={200}
+          minHeight={1}
+          isVisible={!!selected}
+          color={tint}
+          shouldResize={(_e, p) => p.direction[1] === 0}
+          onResizeEnd={(_e, p) => actions?.updateNode(id, { collapsedWidth: Math.round(p.width) })}
+        />
+        <ContainerToolbar id={id} isSubgraph={false} collapsed visible={!!selected} color={d.color} />
+        <div className="bd-collapsed-head">
+          <RailHub containerId={id} side="in" ports={[]} proxies={ins} tint={tint} />
+          {caret}
+          <span className="bd-collapsed-title">
+            <Icon name="film" /> <EditableTitle id={id} label={d.label} />
+          </span>
+          <span className="bd-hint">
+            {inside} inside · {ins.length} in · {outs.length} out
+          </span>
+          <RailHub containerId={id} side="out" ports={[]} proxies={outs} tint={tint} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`bd-group${selected ? " is-selected" : ""}`}
@@ -227,8 +321,9 @@ export function GroupNode({ id, data, selected }: NodeProps) {
       }}
     >
       <NodeResizer minWidth={280} minHeight={200} isVisible={!!selected} color={tint} />
-      <ContainerToolbar id={id} isSubgraph={false} visible={!!selected} color={d.color} />
+      <ContainerToolbar id={id} isSubgraph={false} collapsed={false} visible={!!selected} color={d.color} />
       <div className="bd-group-title">
+        {caret}
         <Icon name="film" /> <EditableTitle id={id} label={d.label} />
         <span className="bd-hint">group — make it a subgraph to expose its edges</span>
       </div>
@@ -379,13 +474,31 @@ function Rail({
  * (so each wire keeps its own handle id and re-attaches when the Beat expands) plus its inner
  * relay handle, zero-sized — the children are hidden, but React Flow still wants the handle a
  * hidden edge names to exist.
+ *
+ * `proxies` stack on the same hub: the handles `collapse-view` re-routes crossing wires to,
+ * standing in for hidden child ports no rail carries. Every crossing of a plain group is one
+ * of these; on a subgraph only a deep crossing through a plain group inside it is. They are
+ * not connectable — wiring to a stand-in would name no real port.
  */
-function RailHub({ containerId, side, ports, tint }: { containerId: string; side: "in" | "out"; ports: BoundaryPort[]; tint: string }) {
+function RailHub({
+  containerId,
+  side,
+  ports,
+  proxies = [],
+  tint,
+}: {
+  containerId: string;
+  side: "in" | "out";
+  ports: BoundaryPort[];
+  proxies?: ProxyHandle[];
+  tint: string;
+}) {
   const outerType = side === "in" ? "target" : "source";
   const innerType = side === "in" ? "source" : "target";
   const outerPos = side === "in" ? Position.Left : Position.Right;
   const innerPos = side === "in" ? Position.Right : Position.Left;
-  const title = ports.length ? `${side === "in" ? "in" : "out"}: ${ports.map((p) => p.label).join(", ")}` : side === "in" ? "no inputs" : "no outputs";
+  const labels = [...ports.map((p) => p.label), ...proxies.map((p) => p.label)];
+  const title = labels.length ? `${side === "in" ? "in" : "out"}: ${labels.join(", ")}` : side === "in" ? "no inputs" : "no outputs";
   return (
     <>
       {ports.map((bp) => (
@@ -399,13 +512,28 @@ function RailHub({ containerId, side, ports, tint }: { containerId: string; side
           style={{ background: tint, top: "50%" }}
         />
       ))}
+      {proxies.map((p) => (
+        <Handle
+          key={p.id}
+          id={p.id}
+          type={outerType}
+          position={outerPos}
+          className="bd-hub is-proxy"
+          title={title}
+          isConnectable={false}
+          style={{ background: tint, top: "50%" }}
+        />
+      ))}
       {ports.map((bp) => (
         <Handle key={innerHandleId(bp.id)} id={innerHandleId(bp.id)} type={innerType} position={innerPos} className="bd-hub-inner" style={{ top: "50%" }} />
       ))}
-      {ports.length === 0 ? <span className={`bd-hub bd-hub-empty bd-hub-${side}`} title={title} /> : null}
+      {labels.length === 0 ? <span className={`bd-hub bd-hub-empty bd-hub-${side}`} title={title} /> : null}
     </>
   );
 }
+
+/** The proxies a collapsed container carries on one side. */
+const proxiesOn = (d: BeatData, side: "in" | "out"): ProxyHandle[] => (d.proxies ?? []).filter((p) => p.side === side);
 
 /** A promoted Beat. Expanded it shows its rails; collapsed it is one card that still wires. */
 export function SubgraphNode({ id, data, selected }: NodeProps) {
@@ -420,7 +548,7 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
   // stale point — the same class of wrongness as mispositioning the handle itself.
   useEffect(() => {
     updateInternals(id);
-  }, [id, collapsed, d.promotedIn.length, d.promotedOut.length, d.faces?.length, updateInternals]);
+  }, [id, collapsed, d.promotedIn.length, d.promotedOut.length, d.faces?.length, d.proxies?.length, updateInternals]);
 
   const caret = (
     <button
@@ -461,7 +589,7 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
         />
         <ContainerToolbar id={id} isSubgraph collapsed visible={!!selected} color={d.color} />
         <div className="bd-collapsed-head">
-          <RailHub containerId={id} side="in" ports={d.promotedIn} tint={tint} />
+          <RailHub containerId={id} side="in" ports={d.promotedIn} proxies={proxiesOn(d, "in")} tint={tint} />
           {caret}
           <span className="bd-collapsed-title">
             <Icon name="film" /> <EditableTitle id={id} label={d.label} />
@@ -469,7 +597,7 @@ export function SubgraphNode({ id, data, selected }: NodeProps) {
           <span className="bd-hint">
             {d.promotedIn.length} in · {d.promotedOut.length} out
           </span>
-          <RailHub containerId={id} side="out" ports={d.promotedOut} tint={tint} />
+          <RailHub containerId={id} side="out" ports={d.promotedOut} proxies={proxiesOn(d, "out")} tint={tint} />
         </div>
         {pill ? null : (
           <div className="bd-collapsed-body">
