@@ -146,7 +146,10 @@ test("the Queue tab lists the project's jobs with resolved labels; retry and re-
   const mock = await mockCalliope(page);
   await waitForDemo(page);
   await drive(page, "project_open", { project_id: 1 });
-  await expect(page.locator(".bd-project")).toHaveValue("1");
+  // Assert the LOAD, not the widget that displays it: U11 replaced the toolbar's project
+  // <select> with a menu, so a selector-based check pinned a control that no longer exists.
+  // `project_current` is the same fact, asked of the editor instead of the DOM.
+  expect((await drive<{ project_id: number | null }>(page, "project_current")).project_id).toBe(1);
 
   await page.getByRole("tab", { name: "Queue" }).click();
   const rows = page.locator(".bd-job");
