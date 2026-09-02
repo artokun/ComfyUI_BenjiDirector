@@ -15,9 +15,10 @@ import "./styles.css";
 import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 // ── feature modules register panels, slots and drive commands on import; one line per unit ──
 // U1 (stability: nothing to import)
-import "./node-chrome.jsx";
+// U2 import "./node-chrome.jsx";
 import "./clipboard.drive.js"; import "./help.jsx"; // U3 (useEditorHotkeys is mounted by DirectorApp)
-// U4 import "./sidebar.jsx"; import "./persistence.js";
+import "./sidebar.jsx"; import "./persistence.js"; // U4
+import "./node-chrome.jsx";
 import "./container-delete.jsx"; // U5
 // U6 (collapse-view.ts is imported by DirectorApp)
 import "./blueprint-modal.jsx"; // U7

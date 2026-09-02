@@ -84,6 +84,7 @@ import { resolveDrive, type DriveKit } from "./drive-registry.js";
 import { Icon } from "./icons.jsx";
 import { ModalProvider } from "./modal.jsx";
 import { summarizeEdge, summarizeNode } from "./outline.js";
+import { loadAutosave } from "./persistence.js"; // [U4]
 import { usePanels } from "./panels.js";
 import { DirectorMiniMap } from "./selection-toolbar.jsx"; // [U8a]
 import { MULTI_SELECT_KEYS, useSnapToGrid } from "./selection-model.js"; // [U8a]
@@ -282,7 +283,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   // `nodes` state of its own first render to rebuild `edges` is a footgun: it ran, produced an
   // empty edge set, and the canvas came up with six nodes and no wires at all.
   const initial = useMemo(() => {
-    const p = demoProject();
+    const p = loadAutosave() ?? demoProject(); // [U4] the autosaved working graph beats the demo
     return decorate(asRF(p.nodes as GraphNode<DirectorData>[]), asRFEdges(p.edges));
   }, []);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
