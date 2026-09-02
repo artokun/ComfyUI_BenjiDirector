@@ -1,0 +1,73 @@
+/* U7 — blueprints: the save dialog and the library menu. Tokens (--bd-*) only. */
+
+/* ── save dialog: wears the shared .bd-modal classes, adds what a two-choice dialog needs ── */
+.bd-bp-dialog .bd-modal-title { display: flex; align-items: center; gap: 8px; }
+.bd-bp-dialog .bd-modal-body b { color: var(--bd-text); font-weight: 600; }
+.bd-bp-dialog .bd-bp-version {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: var(--bd-r-pill);
+  border: 1px solid var(--bd-line-2);
+  font-family: var(--bd-font-mono);
+  font-size: var(--bd-fs-2xs);
+  color: var(--bd-text);
+  vertical-align: 1px;
+}
+.bd-bp-dialog .bd-modal-actions .bd-btn { min-width: 84px; justify-content: center; }
+
+/* ── library menu ── */
+.bd-bpmenu { position: relative; display: inline-flex; }
+.bd-bpmenu-btn { display: inline-flex; align-items: center; gap: 6px; }
+.bd-bpmenu-btn.is-on { color: var(--bd-text); border-color: var(--bd-line-2); }
+.bd-bpmenu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 70;
+  min-width: 320px;
+  max-width: 400px;
+  padding: 6px;
+  border-radius: var(--bd-r-lg);
+  border: 1px solid var(--bd-line);
+  background: var(--bd-panel);
+  box-shadow: var(--bd-shadow-panel);
+  animation: bd-in var(--bd-dur) var(--bd-ease);
+}
+.bd-bpmenu-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px 8px;
+  font-size: var(--bd-fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps);
+  color: var(--bd-dim);
+}
+.bd-bpmenu-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 4px 5px 8px;
+  border-radius: var(--bd-r-sm);
+  transition: background var(--bd-dur-fast) var(--bd-ease);
+}
+.bd-bpmenu-row:hover { background: var(--bd-raised); }
+.bd-bpmenu-label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding-right: 8px; }
+.bd-bpmenu-name {
+  color: var(--bd-text);
+  font-size: var(--bd-fs-md);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bd-bpmenu-actions { flex: 0 0 auto; display: grid; grid-template-columns: repeat(3, 28px); gap: 2px; }
+.bd-bpmenu-row .bd-btn.is-icon { flex: 0 0 auto; }
+.bd-bpmenu-row .bd-bpmenu-del:hover { color: var(--bd-bad); }
+.bd-bpmenu-foot {
+  margin-top: 4px;
+  padding: 8px 8px 4px;
+  border-top: 1px solid var(--bd-line-soft);
+  color: var(--bd-dim);
+  font-size: var(--bd-fs-xs);
+  line-height: 1.5;
+}
