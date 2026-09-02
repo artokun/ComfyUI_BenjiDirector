@@ -37,6 +37,7 @@ import { useActions } from "./actions.js";
 import { FaceRow } from "./faces.jsx";
 import { ACCENT, ContainerToolbar } from "./container-toolbar.jsx";
 import { Icon } from "./icons.js";
+import { LeafResizeGrip } from "./leaf-resize.jsx"; // [U1]
 import { RenderBadge } from "./render-badge.jsx";
 import {
   PORT_COLOR,
@@ -145,6 +146,7 @@ export function SceneNode({ id, data, selected }: NodeProps) {
           </div>
         ))}
       </div>
+      <LeafResizeGrip /> {/* [U1] */}
     </div>
   );
 }
@@ -168,6 +170,7 @@ export function AssetNode({ id, data, selected }: NodeProps) {
           </div>
         </div>
       ) : null}
+      <LeafResizeGrip /> {/* [U1] */}
     </div>
   );
 }
