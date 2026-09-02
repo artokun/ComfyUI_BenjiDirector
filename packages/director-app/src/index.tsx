@@ -23,7 +23,7 @@ import "./clipboard.drive.js"; import "./help.jsx"; // U3 (useEditorHotkeys is m
 import "./blueprint-modal.jsx"; // U7
 import "./selection-toolbar.jsx"; // U8a
 // U8b import "./reroute.jsx";
-// U9 import "./note-node.jsx";
+import "./note-node.jsx"; // U9
 import "./JobStrip.jsx"; // U10
 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
 // U12 import "./Inspector.jsx";

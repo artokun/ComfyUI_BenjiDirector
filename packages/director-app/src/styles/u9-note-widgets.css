@@ -1,0 +1,381 @@
+/* ── U9: the note node and the widget kit ──────────────────────────────────────────────
+   Tokens only. The sticky note is the one surface in the editor allowed a warm paper tint;
+   --bd-sticky-paper is that tint, declared here so the face can borrow it for the note glyph. */
+.bd-root {
+  --bd-sticky-paper: #e9c46a;
+}
+
+/* ── RangeControl: a pill with a filled track, − / + at the ends, click the value to type ── */
+.bd-range {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 22px;
+  border-radius: var(--bd-r-sm);
+  border: 1px solid var(--bd-line);
+  background: color-mix(in srgb, var(--bd-bg) 55%, transparent);
+  box-shadow: var(--bd-hairline);
+  overflow: hidden;
+  font-family: var(--bd-font);
+  transition: border-color var(--bd-dur-fast) var(--bd-ease), box-shadow var(--bd-dur-fast) var(--bd-ease);
+}
+.bd-range:hover { border-color: var(--bd-line-2); }
+.bd-range:focus-within { border-color: var(--bd-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bd-accent) 25%, transparent); }
+.bd-range.is-disabled { opacity: 0.5; pointer-events: none; }
+.bd-range-step {
+  flex: 0 0 auto;
+  width: 20px;
+  border: 0;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--bd-dim);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--bd-dur-fast) var(--bd-ease), color var(--bd-dur-fast) var(--bd-ease);
+}
+.bd-range-step:hover { background: var(--bd-hover); color: var(--bd-text); }
+.bd-range-step:active { background: var(--bd-raised); }
+.bd-range-step:disabled { opacity: 0.4; cursor: default; }
+.bd-range-track {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  cursor: ew-resize;
+  overflow: hidden;
+  touch-action: none;
+  border-left: 1px solid var(--bd-line-soft);
+  border-right: 1px solid var(--bd-line-soft);
+}
+.bd-range-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bd-accent) 45%, transparent), color-mix(in srgb, var(--bd-accent) 70%, var(--bd-accent-2)));
+  z-index: 0;
+  pointer-events: none;
+}
+.bd-range-val {
+  position: relative;
+  z-index: 1;
+  padding: 0 8px;
+  font-size: var(--bd-fs-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--bd-text);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+  cursor: text;
+  user-select: none;
+  white-space: nowrap;
+}
+.bd-range-edit {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--bd-text);
+  font: inherit;
+  font-size: var(--bd-fs-xs);
+  font-variant-numeric: tabular-nums;
+  padding: 0 8px;
+  outline: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.bd-range-edit::-webkit-inner-spin-button,
+.bd-range-edit::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ── Toggle ── */
+.bd-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bd-dim);
+  font: inherit;
+  font-size: var(--bd-fs-xs);
+  cursor: pointer;
+}
+.bd-toggle:disabled { opacity: 0.5; cursor: default; }
+.bd-toggle-track {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: var(--bd-r-pill);
+  border: 1px solid var(--bd-line-2);
+  background: var(--bd-raised);
+  box-shadow: var(--bd-hairline);
+  transition: background var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
+}
+.bd-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bd-dim);
+  transition: transform var(--bd-dur) var(--bd-ease), background var(--bd-dur) var(--bd-ease);
+}
+.bd-toggle.is-on { color: var(--bd-text); }
+.bd-toggle.is-on .bd-toggle-track { background: color-mix(in srgb, var(--bd-accent) 35%, var(--bd-raised)); border-color: var(--bd-accent); }
+.bd-toggle.is-on .bd-toggle-knob { transform: translateX(12px); background: var(--bd-accent); }
+.bd-toggle:focus-visible .bd-toggle-track { box-shadow: 0 0 0 2px color-mix(in srgb, var(--bd-accent) 30%, transparent); }
+
+/* ── Stepper ── */
+.bd-stepper { display: inline-flex; align-items: center; gap: 2px; }
+.bd-stepper button {
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  padding: 0;
+  background: var(--bd-panel);
+  color: var(--bd-text);
+  border: 1px solid var(--bd-line);
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color var(--bd-dur-fast) var(--bd-ease), background var(--bd-dur-fast) var(--bd-ease);
+}
+.bd-stepper button:hover { border-color: var(--bd-line-2); background: var(--bd-raised); }
+.bd-stepper button:disabled { opacity: 0.4; cursor: default; }
+.bd-stepper-val { font-size: 10.5px; min-width: 28px; text-align: center; color: var(--bd-text); font-variant-numeric: tabular-nums; }
+
+/* ── Select ── */
+.bd-select { position: relative; display: inline-flex; align-items: center; }
+.bd-select select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0 1.4rem 0 0.5rem;
+  height: 22px;
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-sm);
+  background: color-mix(in srgb, var(--bd-bg) 55%, transparent);
+  color: var(--bd-text);
+  font: inherit;
+  font-size: var(--bd-fs-xs);
+  cursor: pointer;
+  outline: none;
+  box-shadow: var(--bd-hairline);
+}
+.bd-select select:hover { border-color: var(--bd-line-2); }
+.bd-select select:focus-visible { border-color: var(--bd-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bd-accent) 25%, transparent); }
+.bd-select select option { background: var(--bd-panel); color: var(--bd-text); }
+.bd-select-caret { position: absolute; right: 6px; pointer-events: none; color: var(--bd-dim); }
+
+/* ── Faces: the widget rows on a collapsed Beat's card ── */
+.bd-face.bd-u9-face {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0.3rem 0.45rem 0.35rem;
+}
+.bd-u9-face-head { display: flex; align-items: center; gap: 0.4rem; min-width: 0; min-height: 16px; }
+.bd-u9-face-head .bd-icon { flex: none; color: var(--bd-dim); }
+.bd-u9-face-head .bd-face-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  cursor: default;
+}
+.bd-u9-face-head .bd-face-input { flex: 1; min-width: 0; width: auto; }
+.bd-u9-face-kind {
+  flex: none;
+  font-size: var(--bd-fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps);
+  color: var(--bd-dim);
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-pill);
+  padding: 0 0.4rem;
+  line-height: 1.5;
+}
+.bd-u9-face-action {
+  font-size: var(--bd-fs-2xs);
+  color: var(--bd-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bd-u9-face-note .bd-icon { color: var(--bd-sticky-paper); }
+.bd-u9-face-note .bd-face-label { font-weight: 500; }
+.bd-u9-face-note .bd-face-label.is-empty { color: var(--bd-dim); font-style: italic; font-weight: 400; }
+.bd-u9-face-range { height: 20px; }
+
+/* ── The note ──────────────────────────────────────────────────────────────────────────── */
+.bd-sticky {
+  --bd-sticky-ink: var(--bd-sticky-tint, var(--bd-sticky-paper));
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--bd-radius);
+  border: 1px solid color-mix(in srgb, var(--bd-sticky-ink) 34%, var(--bd-line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bd-sticky-ink) 14%, var(--bd-panel)), color-mix(in srgb, var(--bd-sticky-ink) 9%, var(--bd-panel)));
+  box-shadow: var(--bd-shadow);
+  color: var(--bd-text-node);
+  font-family: var(--bd-font);
+  overflow: hidden;
+  transition: border-color var(--bd-dur) var(--bd-ease), box-shadow var(--bd-dur) var(--bd-ease);
+}
+.bd-sticky:hover { border-color: color-mix(in srgb, var(--bd-sticky-ink) 50%, var(--bd-line-2)); }
+.bd-sticky.is-selected { border-color: var(--bd-accent); box-shadow: 0 0 0 1px var(--bd-accent), var(--bd-shadow); }
+.bd-sticky.is-promoted { box-shadow: 0 -2px 0 0 var(--bd-pin) inset, var(--bd-shadow); }
+.bd-sticky.is-selected.is-promoted { box-shadow: 0 -2px 0 0 var(--bd-pin) inset, 0 0 0 1px var(--bd-accent), var(--bd-shadow); }
+.bd-sticky-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  box-sizing: border-box;
+  min-height: 27px;
+  padding: 0.3rem 0.6rem;
+  font-size: var(--bd-fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: color-mix(in srgb, var(--bd-sticky-ink) 55%, var(--bd-text));
+  background: color-mix(in srgb, var(--bd-sticky-ink) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--bd-sticky-ink) 24%, var(--bd-line-soft));
+  cursor: grab;
+}
+.bd-sticky-head:active { cursor: grabbing; }
+.bd-sticky-head .bd-icon { flex: none; color: var(--bd-sticky-ink); }
+.bd-sticky-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-sticky-title-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bd-bg);
+  color: var(--bd-text);
+  border: 1px solid var(--bd-accent);
+  border-radius: 4px;
+  font: inherit;
+  font-size: var(--bd-fs-xs);
+  padding: 0 0.3rem;
+  outline: none;
+}
+.bd-sticky-view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0.45rem 0.65rem 0.75rem;
+  font-size: var(--bd-fs-md);
+  line-height: 1.5;
+  cursor: text;
+}
+.bd-sticky-empty { color: var(--bd-dim); font-style: italic; font-size: var(--bd-fs-sm); user-select: none; }
+.bd-sticky-edit {
+  flex: 1;
+  min-height: 0;
+  margin: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  resize: none;
+  box-sizing: border-box;
+  border: 1px solid var(--bd-accent);
+  border-radius: var(--bd-r-sm);
+  background: color-mix(in srgb, var(--bd-bg) 65%, transparent);
+  color: var(--bd-text);
+  font-family: var(--bd-font-mono);
+  font-size: var(--bd-fs-sm);
+  line-height: 1.5;
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bd-accent) 22%, transparent);
+}
+.bd-sticky-edit::placeholder { color: var(--bd-faint); }
+
+/* Rendered markdown. Compact rhythm — this is a card, not a document. */
+.bd-sticky-md > :first-child { margin-top: 0; }
+.bd-sticky-md > :last-child { margin-bottom: 0; }
+.bd-sticky-md h1, .bd-sticky-md h2, .bd-sticky-md h3, .bd-sticky-md h4 {
+  margin: 0.55em 0 0.3em;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--bd-text);
+  border-bottom: 1px solid color-mix(in srgb, var(--bd-sticky-ink) 22%, var(--bd-line-soft));
+  padding-bottom: 0.15em;
+}
+.bd-sticky-md h1 { font-size: 17px; }
+.bd-sticky-md h2 { font-size: 15px; }
+.bd-sticky-md h3 { font-size: 13.5px; }
+.bd-sticky-md h4 { font-size: 13px; border-bottom: none; }
+.bd-sticky-md p { margin: 0.3em 0; }
+.bd-sticky-md ul, .bd-sticky-md ol { margin: 0.3em 0; padding-left: 1.4em; }
+.bd-sticky-md li { margin: 0.1em 0; }
+.bd-sticky-md a { color: var(--bd-accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--bd-accent) 50%, transparent); }
+.bd-sticky-md a:hover { text-decoration-color: var(--bd-accent); }
+.bd-sticky-md code {
+  font-family: var(--bd-font-mono);
+  font-size: 0.88em;
+  background: color-mix(in srgb, var(--bd-bg) 55%, transparent);
+  border: 1px solid var(--bd-line-soft);
+  border-radius: 4px;
+  padding: 0 0.3em;
+}
+.bd-sticky-md pre {
+  margin: 0.4em 0;
+  padding: 0.5em 0.6em;
+  overflow: auto;
+  background: color-mix(in srgb, var(--bd-bg) 65%, transparent);
+  border: 1px solid var(--bd-line-soft);
+  border-radius: var(--bd-r-sm);
+}
+.bd-sticky-md pre code { background: transparent; border: 0; padding: 0; }
+.bd-sticky-md blockquote {
+  margin: 0.4em 0;
+  padding-left: 0.7em;
+  border-left: 2px solid color-mix(in srgb, var(--bd-sticky-ink) 60%, transparent);
+  color: var(--bd-dim);
+}
+.bd-sticky-md hr { border: 0; border-top: 1px solid var(--bd-line); margin: 0.6em 0; }
+.bd-sticky-md table { border-collapse: collapse; margin: 0.4em 0; font-size: 0.92em; }
+.bd-sticky-md th, .bd-sticky-md td { border: 1px solid var(--bd-line); padding: 0.2em 0.5em; }
+.bd-sticky-md th { background: color-mix(in srgb, var(--bd-sticky-ink) 10%, transparent); font-weight: 600; }
+.bd-sticky-md img { max-width: 100%; border-radius: var(--bd-r-sm); }
+.bd-sticky-md input[type="checkbox"] { margin: 0 0.4em 0 0; accent-color: var(--bd-accent); }
+
+/* The dog-ear grip.
+   React Flow's own `.handle.bottom.right` pins the control to left/top 100% and centres it on
+   the corner with a transform — half of it would then sit outside the card, where `overflow:
+   hidden` clips it. Each of those declarations has to be beaten, so the selector carries React
+   Flow's four classes plus ours rather than trusting stylesheet order. */
+.bd-sticky .react-flow__resize-control.bd-sticky-grip.handle.bottom.right {
+  width: 18px;
+  height: 18px;
+  left: auto;
+  top: auto;
+  right: 0;
+  bottom: 0;
+  transform: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: nwse-resize;
+  opacity: 0.55;
+  transition: opacity var(--bd-dur-fast) var(--bd-ease);
+}
+.bd-sticky:hover .react-flow__resize-control.bd-sticky-grip,
+.bd-sticky.is-selected .react-flow__resize-control.bd-sticky-grip { opacity: 1; }
+.bd-sticky-grip-icon {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 10px;
+  height: 10px;
+  color: color-mix(in srgb, var(--bd-sticky-ink) 70%, var(--bd-dim));
+  background: linear-gradient(135deg, transparent 0 4px, currentColor 4px 5.5px, transparent 5.5px 8px, currentColor 8px 9.5px, transparent 9.5px);
+  pointer-events: none;
+}
