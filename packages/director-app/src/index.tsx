@@ -31,7 +31,7 @@ import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
 // U14 import "./AssetsPanel.jsx";
 // U15 import "./RenderPanel.jsx";
 // U16 import "./WorkflowsPanel.jsx";
-// U17 import "./QueuePanel.jsx";
+import "./QueuePanel.jsx"; // U17
 // U18 import "./PlaygroundPanel.jsx";
 // U19 (styles only)
 
