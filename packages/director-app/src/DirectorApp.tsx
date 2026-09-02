@@ -83,6 +83,8 @@ import { summarizeEdge, summarizeNode } from "./outline.js";
 import { usePanels } from "./panels.js";
 import { Slot } from "./slots.jsx";
 import { PALETTE_KINDS } from "./model.js";
+// ── [U5] container deletion: the plans and the confirm dispatcher (the modal lives in container-delete.tsx) ──
+import { cascadeDeletePlan, descendantsOf, isContainerBodyTarget, requestDeleteContainer, shellDeletePlan } from "./container-delete.js";
 
 // React Flow types node data as an index signature; ours are interfaces. Identical at runtime,
 // so the casts stay confined to these aliases.
@@ -460,15 +462,18 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   /** Run `fn` against the CURRENT state, snapshotting it for undo first unless told not to. */
   const withCurrent = useCallback(
     (fn: (ns: RFNode[], es: Edge[]) => void, opts: { history?: boolean } = {}) => {
-      setNodes((ns) => {
-        setEdges((es) => {
-          queueMicrotask(() => {
-            if (opts.history !== false) pushHistory(ns as RFNode[], es);
-            fn(ns as RFNode[], es);
-          });
-          return es;
-        });
-        return ns;
+      // Read the current graph from the refs, in a microtask — NOT from inside a setNodes
+      // updater. A state updater must be pure: the old form called setEdges (a render-phase
+      // update) and queued work from inside it, so React re-ran it on every render pass and
+      // each pass queued another settle. That spun a synchronous render loop that froze the
+      // canvas as soon as anything made a delete resolve a tick later — which is exactly what
+      // [U5]'s onBeforeDelete does, since React Flow awaits it. The refs are assigned on every
+      // render, so by the time this microtask runs they hold the committed graph.
+      queueMicrotask(() => {
+        const ns = nodesRef.current as RFNode[];
+        const es = edgesRef.current;
+        if (opts.history !== false) pushHistory(ns, es);
+        fn(ns, es);
       });
     },
     [pushHistory, setEdges, setNodes],
@@ -863,6 +868,14 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
 
   /** Delete the selection, and every edge that touched it, then reconcile. */
   const deleteSelection = useCallback(() => {
+    // [U5] A populated Beat never cascades silently: the first one selected goes to the confirm
+    // modal (everything, or only the shell) and the rest of the selection waits its turn.
+    const all = nodesRef.current as RFNode[];
+    const populated = all.find((n) => n.selected && isContainer(n) && descendantsOf(asCore(all), n.id).length > 0);
+    if (populated) {
+      if (!requestDeleteContainer(populated.id)) setNote(`${populated.data.label} holds scenes — the delete confirm is not mounted, nothing was deleted`);
+      return;
+    }
     withCurrent((ns, es) => {
       const doomed = new Set(ns.filter((n) => n.selected).map((n) => n.id));
       if (!doomed.size) {
@@ -889,6 +902,24 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       );
     });
   }, [settle, withCurrent]);
+
+  /**
+   * [U5] React Flow's own delete (the Delete key, `deleteElements`) must never cascade a
+   * populated Beat silently: it is routed to the confirm modal and cancelled here. Holds
+   * whatever `deleteKeyCode` says — the pane toolbar's Delete guards itself in deleteSelection.
+   *
+   * MEMOISED, and it must stay that way: `onBeforeDelete` is one of the props React Flow tracks
+   * into its own store (`reactFlowFieldsToTrack`), and StoreUpdater compares them by IDENTITY.
+   * An inline arrow is a new function every render, so it wrote to that store on every render
+   * and spun a synchronous render loop that froze the canvas the moment a delete emptied a Beat.
+   */
+  const onBeforeDelete = useCallback(async ({ nodes: toDelete }: { nodes: Node[]; edges: Edge[] }): Promise<boolean> => {
+    const all = asCore(nodesRef.current as RFNode[]);
+    const populated = toDelete.find((n) => isContainer(n as RFNode) && descendantsOf(all, n.id).length > 0);
+    if (!populated) return true;
+    if (!requestDeleteContainer(populated.id)) setNote(`${String(populated.data.label)} holds scenes — the delete confirm is not mounted, nothing was deleted`);
+    return false;
+  }, []);
 
   /** Wrap the chosen nodes in a new Beat, sized from their own bounds. Returns the Beat id. */
   const groupNodes = useCallback((pick: (n: RFNode) => boolean, title?: string): string | undefined => {
@@ -1027,7 +1058,19 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         setNote("not implemented yet [U3] duplicate");
         return [];
       },
-      deleteContainer: () => setNote("not implemented yet [U5] deleteContainer"),
+      deleteContainer(containerId, mode) {
+        withCurrent((ns, es) => {
+          const target = ns.find((n) => n.id === containerId);
+          if (!target || !isContainer(target)) return setNote(`"${containerId}" is not a Beat`);
+          const plan = mode === "shell" ? shellDeletePlan(asCore(ns), asCoreEdges(es), containerId) : cascadeDeletePlan(asCore(ns), asCoreEdges(es), containerId);
+          // reparent OFF: the shell plan placed each child where it stood; re-deriving by geometry
+          // could hand one to a neighbouring Beat that merely overlaps it.
+          settle(asRF(plan.nodes), asRFEdges(plan.edges), { reparent: false });
+          const n = mode === "shell" ? plan.reparented.length : plan.removed.length;
+          setNote(mode === "shell" ? `deleted ${target.data.label} — ${n} node${n === 1 ? "" : "s"} left where ${n === 1 ? "it" : "they"} stood` : `deleted ${n} node${n === 1 ? "" : "s"}`);
+          return undefined;
+        });
+      },
       updateBlueprint: () => setNote("not implemented yet [U7] updateBlueprint"),
       deleteBlueprint: () => setNote("not implemented yet [U7] deleteBlueprint"),
       setNoteText: () => setNote("not implemented yet [U9] setNoteText"),
@@ -1546,8 +1589,10 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       <EdgeActionsContext.Provider value={edgeActions}>
         <CarryContext.Provider value={carryRef.current}>
           <DirectorContext.Provider value={ctx}>
-          <ModalProvider>
+          {/* [U5] The modal renders INSIDE .bd-root: the --bd-* tokens and the font are scoped there,
+              and its backdrop is position:absolute against it (see modal.tsx). */}
           <div className="bd-root">
+          <ModalProvider>
             <div className="bd-toolbar">
               <strong className="bd-brand"><Icon name="clapper" /> Director</strong>
               <button type="button" onClick={groupSelection} title="Wrap the selection in a new Beat">Group</button>
@@ -1656,6 +1701,14 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                   const ev = e as unknown as MouseEvent;
                   openPalette(ev.clientX, ev.clientY, null);
                 }}
+                onBeforeDelete={onBeforeDelete}
+                onNodeContextMenu={(e, node) => {
+                  // [U5] Right-click on a Beat's BODY (not its title, buttons, handles or rails) opens
+                  // the same palette the pane does; the pick lands inside the Beat, as a drop would.
+                  if (!isContainer(node as RFNode) || !isContainerBodyTarget(e.target as Element)) return;
+                  e.preventDefault();
+                  openPalette(e.clientX, e.clientY, null);
+                }}
                 onNodesDelete={() => queueMicrotask(() => withCurrent((ns, es) => settle(ns, es, { reparent: false })))}
                 deleteKeyCode={["Delete", "Backspace"]}
                 nodeTypes={nodeTypes}
@@ -1698,8 +1751,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
               </div>
             </div>
             <Slot name="footer" />
-          </div>
           </ModalProvider>
+          </div>
           </DirectorContext.Provider>
         </CarryContext.Provider>
       </EdgeActionsContext.Provider>

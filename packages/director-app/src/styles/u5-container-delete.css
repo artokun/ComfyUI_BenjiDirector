@@ -1,0 +1,43 @@
+/* U5 — container deletion: the confirm modal's descendant list and the toolbar trash button.
+   Tokens only (--bd-*); the design unit owns styles.css. */
+
+/* The modal backdrop is position:absolute with inset:0 (modal.tsx) and must cover the EDITOR,
+   not whatever positioned ancestor the host page happens to have. Inert for layout: a flex
+   column with no offsets. */
+.bd-root { position: relative; }
+
+.bd-cdel-lede { margin: 0 0 10px; }
+
+.bd-cdel-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--bd-line-soft);
+  border-radius: var(--bd-r-sm);
+  background: var(--bd-bg-2);
+  box-shadow: var(--bd-hairline);
+}
+.bd-cdel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: var(--bd-fs-sm);
+  color: var(--bd-text);
+  border-bottom: 1px solid var(--bd-line-soft);
+}
+.bd-cdel-row:last-child { border-bottom: 0; }
+.bd-cdel-label { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bd-cdel-kind {
+  flex: none;
+  font: 500 var(--bd-fs-2xs) / 1 var(--bd-font-mono);
+  letter-spacing: var(--bd-track-caps);
+  text-transform: uppercase;
+  color: var(--bd-faint);
+}
+
+/* The trash on a Beat's toolbar reads as the one destructive control in the row. */
+.bd-tbtn.bd-cdel-btn { display: inline-flex; align-items: center; color: var(--bd-bad); }
+.bd-tbtn.bd-cdel-btn:hover {
+  border-color: var(--bd-bad);
+  background: color-mix(in srgb, var(--bd-bad) 14%, transparent);
+}
