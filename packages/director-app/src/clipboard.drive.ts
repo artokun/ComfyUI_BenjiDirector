@@ -89,7 +89,9 @@ registerDriveCommands({
           es.map((e) => (e.selected ? { ...e, selected: false } : e)),
           { reparent: false, sync: false },
         );
-        return { ids };
+        // The OBSERVED effect, not the request echoed back: `selected` is what the canvas now
+        // holds. U8a's pill and the agent surface both read this name.
+        return { selected: ids };
       },
       { history: false },
     ),

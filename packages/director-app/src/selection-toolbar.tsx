@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { MiniMap, useReactFlow, useStoreApi } from "@xyflow/react";
 import { GROUP_TYPE, SUBGRAPH_TYPE } from "@benjidirector/graph-core";
 import { useDirector } from "./director-context.jsx";
-import { registerDriveCommands, resolveDrive, type DriveArgs, type DriveHandler, type DriveKit } from "./drive-registry.js";
+import { registerDriveCommands, type DriveArgs, type DriveHandler, type DriveKit } from "./drive-registry.js";
 import { Icon, type IconName } from "./icons.jsx";
 import { registerSlot } from "./slots.jsx";
 import {
@@ -237,28 +237,10 @@ const fit_view: DriveHandler = async (args, kit) => {
   return { fitted: ids };
 };
 
-/**
- * Set the selection to exactly these nodes. U3 registers this name too; whichever module loads
- * last wins, so both implementations do the same thing — mark the named nodes `selected`, unmark
- * everything else, through the one mutation funnel, without spending an undo step.
- */
-const select: DriveHandler = (args, kit) =>
-  kit.run(
-    (ns, es) => {
-      const ids = idList(args, kit, "ids");
-      for (const id of ids) kit.find(ns, id);
-      const want = new Set(ids);
-      kit.settle(
-        ns.map((n) => (!!n.selected === want.has(n.id) ? n : { ...n, selected: want.has(n.id) })),
-        es,
-        { reparent: false },
-      );
-      return { selected: ids };
-    },
-    { history: false },
-  );
-
-registerDriveCommands(resolveDrive("select") ? { fit_view } : { fit_view, select });
+// `select` is U3's (`clipboard.drive.ts`) — ONE implementation, not two that must be kept
+// identical. Two copies returning different keys is what made the agent surface's result shape
+// depend on module load order.
+registerDriveCommands({ fit_view });
 
 registerSlot("canvas-overlay", SelectionOverlay, { id: "u8a-selection", order: 20 });
 registerSlot("toolbar-right", SnapAndFit, { id: "u8a-snap-fit", order: 40 });

@@ -1240,9 +1240,14 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       if (!requestDeleteContainer(populated.id)) setNote(`${populated.data.label} holds scenes — the delete confirm is not mounted, nothing was deleted`);
       return;
     }
-    const selected = all.filter((n) => n.selected).map((n) => n.id);
+    // [U8b] A reroute is a BEND, not a stop. Deleting one rejoins the wire it sat on, so it
+    // never goes through the row delete (it has no Calliope row) and its two halves must not
+    // be cut the way an ordinary node's wires are — that leaves the chain severed.
+    const bends = all.filter((n) => n.selected && (n.data as { kind?: string }).kind === "reroute").map((n) => n.id);
+    const bendIds = new Set(bends);
+    const selected = all.filter((n) => n.selected && !bendIds.has(n.id)).map((n) => n.id);
     const wires = new Set(edgesRef.current.filter((e) => e.selected).map((e) => e.id));
-    if (!selected.length && !wires.size) {
+    if (!selected.length && !wires.size && !bends.length) {
       setNote("nothing selected");
       return;
     }
@@ -1251,11 +1256,16 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     if (!res.confirmed) return;
     const gone = new Set(res.gone);
     withCurrent((ns, es) => {
-      setNote(gone.size ? `deleted ${gone.size} node${gone.size === 1 ? "" : "s"}` : `deleted ${wires.size} wire${wires.size === 1 ? "" : "s"}`);
-      const kept = ns.filter((n) => !gone.has(n.id));
+      const count = gone.size + bends.length;
+      setNote(count ? `deleted ${count} node${count === 1 ? "" : "s"}` : `deleted ${wires.size} wire${wires.size === 1 ? "" : "s"}`);
+      // Rejoin BEFORE the nodes go: `rejoinReroute` reads the dot's own two wires to find the
+      // ends it has to join back together.
+      let coreEdges = asCoreEdges(es);
+      for (const id of bends) coreEdges = rejoinReroute(asCore(ns), coreEdges, id);
+      const kept = ns.filter((n) => !gone.has(n.id) && !bendIds.has(n.id));
       settle(
         res.rows ? asRF(withOrderIndexes(asCore(kept), res.rows)) : kept,
-        es.filter((e) => !gone.has(e.source) && !gone.has(e.target) && !wires.has(e.id)),
+        asRFEdges(coreEdges).filter((e) => !gone.has(e.source) && !gone.has(e.target) && !wires.has(e.id)),
         { reparent: false },
       );
     });

@@ -96,8 +96,9 @@ async function mockCalliope(page: Page) {
 
 async function openProject(page: Page) {
   await waitForDemo(page);
-  // The project select appears once the (mocked) health probe answers.
-  await page.selectOption("select.bd-project", "1");
+  // [U11] replaced the project <select> with its own menu, so the project is opened the way
+  // every other Calliope-backed spec opens it — through the drive command the menu calls.
+  await drive(page, "project_open", { project_id: 1 });
   await page.locator('.react-flow__node[data-id="cal-sc-1"]').waitFor();
 }
 
