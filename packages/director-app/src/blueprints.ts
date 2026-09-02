@@ -202,6 +202,7 @@ export function blueprintDialogs(): BlueprintDialogs | null {
 function cleanData(d: DirectorData): DirectorData {
   const copy = { ...d } as DirectorData & Record<string, unknown>;
   delete copy.faces;
+  delete copy.proxies;
   delete copy.inSubgraph;
   if (copy.kind === "beat") {
     // Rails are rebuilt from the wires on instantiate; the interface travels as forcedRails.
