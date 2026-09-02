@@ -199,7 +199,15 @@ export function TimelineDock() {
     (e: React.PointerEvent, clip: TimelineClip, kind: Drag["kind"]) => {
       if (e.button !== 0) return;
       e.stopPropagation();
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      // Capture is what lets the drag leave the clip; it is not what MAKES the drag. It throws
+      // for a pointer the browser does not consider active, and an unguarded call there would
+      // take the whole gesture down with it — so the drag state is set either way, and a drag
+      // without capture still works as long as the pointer stays on the clip.
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {
+        /* no capture; the element's own move and up handlers still see the drag */
+      }
       setDrag({ id: clip.id, kind, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, clip, moved: false });
     },
     [],
