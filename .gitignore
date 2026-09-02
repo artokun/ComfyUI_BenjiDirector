@@ -7,3 +7,4 @@ dist/
 coverage/
 .worktrees/
 e2e/out/
+out/

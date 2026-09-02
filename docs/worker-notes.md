@@ -49,10 +49,15 @@ npm run typecheck && npm test        # tsc --build + vitest (node; use // @vites
 npx playwright install chromium      # once per machine; cached globally
 npm run e2e                          # headless Chromium against the dev harness (demo project, no Calliope)
 ```
-Write `e2e/<unit>.spec.ts`; drive the real DOM; `window.__director.drive(...)` is the drive
-API in the harness; mock Calliope with `page.route("**/api/**", …)` and the row fixtures in
-`packages/director-app/src/calliope-bind.test.ts`; save a screenshot to `e2e/out/<unit>.png`
-and LOOK at it (the Read tool renders PNGs).
+Write `e2e/<unit>.spec.ts`; drive the real DOM. `e2e/helpers.ts` gives you `waitForDemo(page)`,
+`drive(page, name, args)` (the agent's drive API, exposed as `window.__director` in the harness)
+and `shot(page, "<unit>")` (a full-page PNG into `e2e/out/`). Mock Calliope with
+`page.route("**/api/**", …)` and the row fixtures in `packages/director-app/src/calliope-bind.test.ts`.
+Open your PNG with the Read tool and LOOK at it before you call the feature done.
+
+Disk is tight on this machine: `df -h /c` before `npm install`; if free space is under 12 GB,
+wait (sleep 60 and re-check, up to 20 times) rather than filling it. Remove your worktree
+(`git worktree remove --force`) the moment your PR is up.
 
 ## Ship
 
