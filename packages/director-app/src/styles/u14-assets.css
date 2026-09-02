@@ -1,0 +1,428 @@
+/* [U14] Assets — the gallery where a person, a place or a thing gets its picture.
+ *
+ * Scoped under `.bd-root` like every other rule here, and built only from `--bd-*` tokens so
+ * the design unit can restyle the whole editor without touching this file.
+ *
+ * The shape of it: cards on `--bd-panel` a hairline apart, one 16px radius, a 4:5 image tile
+ * (a character sheet is portrait, not square), micro-caps tracked section labels, cyan for
+ * focus, and colour reserved for state — emerald ready, amber working, red failed. Nothing
+ * else is tinted, so a card that IS doing something is the only loud thing on the page.
+ */
+
+.bd-root .bd-assets {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+}
+
+/* ── header ─────────────────────────────────────────────────────────────────── */
+
+.bd-root .bd-assets-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.bd-root .bd-assets-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font: 600 var(--bd-fs-base) / 1.2 var(--bd-font);
+  color: var(--bd-text);
+}
+.bd-root .bd-assets-lead {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  font-size: var(--bd-fs-sm);
+  line-height: 1.5;
+  color: var(--bd-dim);
+}
+.bd-root .bd-assets-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* A section label: uppercase, tracked, small. The only typographic ornament in the panel. */
+.bd-root .bd-section-label {
+  display: block;
+  font-size: var(--bd-fs-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps-wide);
+  color: var(--bd-dim);
+}
+
+/* ── sub-tabs ───────────────────────────────────────────────────────────────── */
+
+.bd-root .bd-assets-subtabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bd-root .bd-assets-subtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-pill);
+  background: var(--bd-panel);
+  color: var(--bd-dim);
+  font: 500 var(--bd-fs-sm) / 1 var(--bd-font);
+  cursor: pointer;
+  transition: background-color var(--bd-dur) var(--bd-ease), color var(--bd-dur) var(--bd-ease), border-color var(--bd-dur) var(--bd-ease);
+}
+.bd-root .bd-assets-subtab:hover { background: var(--bd-raised); color: var(--bd-text); }
+.bd-root .bd-assets-subtab.is-active {
+  background: var(--bd-raised);
+  border-color: var(--bd-line-2);
+  color: var(--bd-text);
+}
+.bd-root .bd-assets-subtab:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--bd-accent); }
+.bd-root .bd-assets-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--bd-r-pill);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: var(--bd-fs-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--bd-dim);
+}
+.bd-root .bd-assets-subtab.is-active .bd-assets-count { background: rgba(34, 211, 238, 0.14); color: #a5f3fc; }
+
+/* ── cards ──────────────────────────────────────────────────────────────────── */
+
+.bd-root .bd-assets-card {
+  padding: 14px;
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-lg);
+  background: var(--bd-panel);
+  box-shadow: var(--bd-hairline);
+}
+.bd-root .bd-assets-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.bd-root .bd-assets-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.bd-root .bd-assets-select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--bd-line-soft);
+  border-radius: var(--bd-r-sm);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--bd-text);
+  font: 500 var(--bd-fs-sm) / 1 var(--bd-font);
+  width: 100%;
+  box-sizing: border-box;
+}
+.bd-root .bd-assets-select:focus-visible { outline: none; border-color: var(--bd-accent); box-shadow: 0 0 0 1px var(--bd-accent); }
+
+/* ── the grid of entities ───────────────────────────────────────────────────── */
+
+.bd-root .bd-assets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.bd-root .bd-entity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-lg);
+  background: var(--bd-panel);
+  box-shadow: var(--bd-hairline);
+  overflow: hidden;
+  transition: border-color var(--bd-dur) var(--bd-ease);
+}
+.bd-root .bd-entity:hover { border-color: var(--bd-line-2); }
+.bd-root .bd-entity.is-selected { border-color: var(--bd-accent); }
+
+/* A character sheet is portrait; 4:5 is the tile every asset gets so the grid stays even. */
+.bd-root .bd-entity-media {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  background: var(--bd-bg);
+  border-bottom: 1px solid var(--bd-line);
+  overflow: hidden;
+}
+.bd-root .bd-entity-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+}
+.bd-root .bd-entity-open:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--bd-accent); }
+.bd-root .bd-entity-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bd-root .bd-entity-blank {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--bd-faint);
+  font-size: var(--bd-fs-xs);
+  letter-spacing: 0.02em;
+}
+.bd-root .bd-entity-quick {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 5px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--bd-dur) var(--bd-ease), transform var(--bd-dur) var(--bd-ease);
+}
+.bd-root .bd-entity-media:hover .bd-entity-quick,
+.bd-root .bd-entity-media:focus-within .bd-entity-quick { opacity: 1; transform: none; }
+
+.bd-root .bd-cover-chip {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--bd-r-pill);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  background: color-mix(in srgb, var(--bd-accent) 20%, rgba(8, 8, 8, 0.78));
+  color: #a5f3fc;
+  font-size: var(--bd-fs-3xs);
+  font-weight: 600;
+  letter-spacing: var(--bd-track-caps);
+  text-transform: uppercase;
+}
+
+.bd-root .bd-entity-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  min-width: 0;
+}
+.bd-root .bd-entity-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font: 600 var(--bd-fs-md) / 1.2 var(--bd-font);
+  color: var(--bd-text);
+}
+.bd-root .bd-entity-meta { font-size: var(--bd-fs-xs); font-weight: 400; color: var(--bd-dim); }
+.bd-root .bd-entity-facts {
+  margin: 0;
+  font-size: var(--bd-fs-xs);
+  line-height: 1.45;
+  color: var(--bd-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bd-root .bd-entity-facts .k {
+  margin-right: 6px;
+  font-size: var(--bd-fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps);
+  color: var(--bd-faint);
+}
+.bd-root .bd-entity-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* ── state: working, failed ─────────────────────────────────────────────────── */
+
+.bd-root .bd-assets-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 12px 12px;
+  background: linear-gradient(transparent, rgba(8, 8, 8, 0.88));
+}
+.bd-root .bd-assets-bar {
+  position: relative;
+  height: 4px;
+  border-radius: var(--bd-r-pill);
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.bd-root .bd-assets-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--bd-warn);
+  animation: bd-u14-slide 1.25s var(--bd-ease) infinite;
+}
+.bd-root .bd-assets-bar.is-known > span { animation: none; }
+.bd-root .bd-assets-bar-label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: var(--bd-fs-3xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps);
+  color: var(--bd-warn);
+}
+@keyframes bd-u14-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+.bd-root .bd-assets-err {
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  border-radius: var(--bd-r-sm);
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--bd-bad);
+  font-size: var(--bd-fs-xs);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.bd-root .bd-assets-note {
+  margin: 0;
+  font-size: var(--bd-fs-xs);
+  line-height: 1.45;
+  color: var(--bd-dim);
+}
+.bd-root .bd-assets-note code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  font-family: var(--bd-font-mono);
+  font-size: var(--bd-fs-3xs);
+}
+.bd-root .bd-assets-warn { color: var(--bd-warn); }
+.bd-root .bd-entity-ready {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--bd-fs-3xs);
+  font-weight: 600;
+  letter-spacing: var(--bd-track-caps);
+  text-transform: uppercase;
+  color: var(--bd-ok);
+}
+
+/* ── the prompt fold ────────────────────────────────────────────────────────── */
+
+.bd-root .bd-prompt-fold {
+  border: 1px solid var(--bd-line);
+  border-radius: var(--bd-r-md);
+  background: var(--bd-bg-2);
+}
+.bd-root .bd-prompt-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--bd-fs-xs);
+  font-weight: 600;
+  color: var(--bd-dim);
+}
+.bd-root .bd-prompt-fold > summary::-webkit-details-marker { display: none; }
+.bd-root .bd-prompt-fold > summary:hover { color: var(--bd-text); }
+.bd-root .bd-prompt-fold[open] > summary { border-bottom: 1px solid var(--bd-line); color: var(--bd-text); }
+.bd-root .bd-prompt-fold[open] > summary .bd-icon { transform: rotate(90deg); }
+.bd-root .bd-prompt-body { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+.bd-root .bd-prompt-body textarea.bd-input { font-family: var(--bd-font-mono); font-size: var(--bd-fs-xs); }
+
+/* ── lightbox ───────────────────────────────────────────────────────────────── */
+
+.bd-root .bd-lightbox {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 24px 28px;
+  background: var(--bd-scrim);
+}
+.bd-root .bd-lightbox img {
+  max-width: min(94%, 1400px);
+  max-height: calc(100% - 80px);
+  object-fit: contain;
+  border-radius: var(--bd-r-md);
+  box-shadow: var(--bd-shadow-float);
+}
+.bd-root .bd-lightbox-caption { font-size: var(--bd-fs-sm); color: var(--bd-dim); }
+.bd-root .bd-lightbox-close { position: absolute; top: 12px; right: 12px; }
+
+/* ── empty state ────────────────────────────────────────────────────────────── */
+
+.bd-root .bd-assets-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 44px 20px;
+  border: 1px dashed var(--bd-line-2);
+  border-radius: var(--bd-r-lg);
+  background: var(--bd-panel);
+  text-align: center;
+  color: var(--bd-dim);
+}
+.bd-root .bd-assets-empty h4 { margin: 0; font: 600 var(--bd-fs-md) / 1.2 var(--bd-font); color: var(--bd-text); }
+.bd-root .bd-assets-empty p { margin: 0; max-width: 46ch; font-size: var(--bd-fs-sm); line-height: 1.5; }
+
+/* The file input stays in the layout (a 1px clipped box) rather than `display: none`, so it
+   can be driven by a click on its button AND by a test that hands it a file directly. */
+.bd-root .bd-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+}
+
+/* ── the thumbnail on an Asset node (asset-thumb.tsx) ───────────────────────── */
+
+.bd-root .bd-asset-thumb {
+  display: block;
+  width: 100%;
+  height: 88px;
+  object-fit: cover;
+  border-radius: var(--bd-r-sm);
+  border: 1px solid var(--bd-line);
+  margin: 4px 0 2px;
+  background: var(--bd-bg);
+}

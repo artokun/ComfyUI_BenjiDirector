@@ -28,7 +28,7 @@ import "./JobStrip.jsx"; // U10
 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
 // U12 import "./Inspector.jsx";
 // U13 (calliope-sync.ts is imported by DirectorApp)
-// U14 import "./AssetsPanel.jsx";
+import "./AssetsPanel.jsx"; // U14
 // U15 import "./RenderPanel.jsx";
 import "./WorkflowsPanel.jsx"; // U16
 import "./QueuePanel.jsx"; // U17

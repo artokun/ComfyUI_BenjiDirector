@@ -37,6 +37,7 @@ import { emptySlotHandle, innerHandleId, type BoundaryPort } from "@benjidirecto
 import { useActions } from "./actions.js";
 import { FaceRow } from "./faces.jsx";
 import { ACCENT, ContainerToolbar } from "./container-toolbar.jsx";
+import { AssetThumb } from "./asset-thumb.jsx"; // [U14]
 import { Icon } from "./icons.js";
 import { LeafResizeGrip } from "./leaf-resize.jsx"; // [U1]
 import { RenderBadge } from "./render-badge.jsx";
@@ -157,6 +158,8 @@ export function AssetNode({ id, data, selected }: NodeProps) {
         <LeafInfo data={d} />
         {collapsed ? <LeafHub side="out" ports={outs} /> : null}
       </div>
+      {/* [U14] the sheet/reference image; [U2] a collapsed asset is header-only. */}
+      {collapsed || !d.imagePath ? null : <AssetThumb path={d.imagePath} />}
       {collapsed || !outs.length ? null : (
         <div className="bd-ports">
           {outs.map((p) => (
