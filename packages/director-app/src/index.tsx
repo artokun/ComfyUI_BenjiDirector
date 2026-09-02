@@ -20,7 +20,7 @@ import "./node-chrome.jsx";
 // U4 import "./sidebar.jsx"; import "./persistence.js";
 // U5 import "./container-delete.jsx";
 // U6 (collapse-view.ts is imported by DirectorApp)
-// U7 import "./blueprint-modal.jsx";
+import "./blueprint-modal.jsx"; // U7
 // U8a import "./selection-toolbar.jsx";
 // U8b import "./reroute.jsx";
 // U9 import "./note-node.jsx";
