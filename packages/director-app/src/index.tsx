@@ -20,11 +20,11 @@ import "./clipboard.drive.js"; import "./help.jsx"; // U3 (useEditorHotkeys is m
 // U4 import "./sidebar.jsx"; import "./persistence.js";
 // U5 import "./container-delete.jsx";
 // U6 (collapse-view.ts is imported by DirectorApp)
-// U7 import "./blueprint-modal.jsx";
+import "./blueprint-modal.jsx"; // U7
 // U8a import "./selection-toolbar.jsx";
 // U8b import "./reroute.jsx";
 // U9 import "./note-node.jsx";
-// U10 import "./JobStrip.jsx";
+import "./JobStrip.jsx"; // U10
 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
 // U12 import "./Inspector.jsx";
 // U13 (calliope-sync.ts is imported by DirectorApp)
@@ -32,7 +32,7 @@ import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx"; // U11
 // U15 import "./RenderPanel.jsx";
 // U16 import "./WorkflowsPanel.jsx";
 import "./QueuePanel.jsx"; // U17
-// U18 import "./PlaygroundPanel.jsx";
+import "./PlaygroundPanel.jsx"; // U18
 // U19 (styles only)
 
 export interface MountOptions {
