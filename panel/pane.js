@@ -50,6 +50,23 @@ function ensureCss() {
 }
 
 /**
+ * Markdown → safe HTML for the editor's notes, from the host's own `marked` + `DOMPurify`.
+ * Returns undefined when either is missing so the editor falls back to escaped plain text —
+ * a note must never render unsanitised HTML because the sanitiser was absent. A `marked` in
+ * async mode hands back a Promise; that throws here, and the editor's guard falls back too.
+ */
+function markdownRenderer(ctx) {
+  const marked = ctx?.marked;
+  const purify = ctx?.DOMPurify;
+  if (typeof marked?.parse !== "function" || typeof purify?.sanitize !== "function") return undefined;
+  return (md) => {
+    const html = marked.parse(String(md ?? ""));
+    if (typeof html !== "string") throw new Error("marked.parse returned no HTML (async mode?)");
+    return purify.sanitize(html);
+  };
+}
+
+/**
  * @param {object} ctx   host capability bag (api, callTool, marked, DOMPurify, openUrl, …)
  * @param {object} shell { body, searchEl, subnav, close, applyDock, switchTab, isDocked, … }
  * @param {object} opts  per-open seed passed through `tabOpts`
@@ -78,6 +95,7 @@ export function createDirectorContent(ctx, shell, opts = {}) {
       bodyEl.textContent = "";
       handle = mod.mountDirector(bodyEl, {
         calliopeBaseUrl: opts.calliopeBaseUrl,
+        renderMarkdown: markdownRenderer(ctx),
       });
     } catch (err) {
       if (mountEl === bodyEl && bodyEl.isConnected) {

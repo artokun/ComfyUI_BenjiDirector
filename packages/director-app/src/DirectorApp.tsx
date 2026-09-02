@@ -1030,7 +1030,11 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       deleteContainer: () => setNote("not implemented yet [U5] deleteContainer"),
       updateBlueprint: () => setNote("not implemented yet [U7] updateBlueprint"),
       deleteBlueprint: () => setNote("not implemented yet [U7] deleteBlueprint"),
-      setNoteText: () => setNote("not implemented yet [U9] setNoteText"),
+      setNoteText(nodeId, text) {
+        withCurrent((ns, es) => {
+          settle(ns.map((n) => (n.id === nodeId && n.data.kind === "note" ? ({ ...n, data: { ...n.data, text } } as RFNode) : n)), es, { reparent: false });
+        });
+      },
       togglePin(nodeId) {
         withCurrent((ns, es) => {
           settle(

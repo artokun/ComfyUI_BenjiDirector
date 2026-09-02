@@ -98,6 +98,9 @@ export interface NoteData extends BaseNodeData {
   text: string;
   ports: PortInfo[];
   color?: string;
+  /** [U9] Pinned to the Beat's collapsed face, where it shows its first line. */
+  promoted?: boolean;
+  inSubgraph?: boolean;
 }
 
 /** A pass-through dot on a wire: one typed input, one typed output, same type. */
@@ -110,11 +113,14 @@ export interface RerouteData extends BaseNodeData {
 /** One row on a collapsed Beat's face: a descendant its author pinned. */
 export interface PromotedFace {
   id: string;
-  kind: "scene" | "asset";
+  kind: "scene" | "asset" | "note";
   label: string;
   durationSec?: number;
   videoPath?: string;
   assetKind?: AssetData["asset"];
+  /** [U9] Read-only detail a face may show: a scene's action line, a note's text. */
+  action?: string;
+  text?: string;
 }
 
 export interface BeatData extends BaseNodeData, ContainerNodeData {

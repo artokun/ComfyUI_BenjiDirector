@@ -35,6 +35,7 @@ import { useEffect, useRef, useState } from "react";
 import { emptySlotHandle, innerHandleId, type BoundaryPort } from "@benjidirector/graph-core";
 import { useActions } from "./actions.js";
 import { FaceRow } from "./faces.jsx";
+import { NoteNode } from "./note-node.jsx";
 import { ACCENT, ContainerToolbar } from "./container-toolbar.jsx";
 import { Icon } from "./icons.js";
 import { RenderBadge } from "./render-badge.jsx";
@@ -517,4 +518,5 @@ export const nodeTypes = {
   asset: AssetNode,
   groupbox: GroupNode,
   subgraph: SubgraphNode,
+  note: NoteNode,
 };

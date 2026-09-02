@@ -23,7 +23,7 @@ import { DirectorApp, type DriveFn } from "./DirectorApp.jsx";
 // U7 import "./blueprint-modal.jsx";
 // U8a import "./selection-toolbar.jsx";
 // U8b import "./reroute.jsx";
-// U9 import "./note-node.jsx";
+import "./note-node.jsx"; // U9
 // U10 import "./JobStrip.jsx";
 // U11 import "./ProjectMenu.jsx"; import "./SettingsPanel.jsx";
 // U12 import "./Inspector.jsx";
