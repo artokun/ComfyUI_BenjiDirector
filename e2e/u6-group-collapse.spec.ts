@@ -68,6 +68,21 @@ test("collapsing a plain group hides its children and re-routes the crossing wir
   // State never saw a proxy.
   await expectCanonical(page);
 
+  // `decorate` re-derives `data.proxies` on EVERY settle, so settling again must be a no-op —
+  // otherwise the collapsed card churns (or the reparent pass drops the hidden children out of
+  // the group, whose relative positions sit outside the small collapsed box).
+  await drive(page, "repair");
+  await drive(page, "repair");
+  const resettled = await drive<Summary>(page, "read_node", { id: "beat-1" });
+  expect(resettled.proxies).toEqual(collapsedBeat.proxies);
+  expect(resettled.collapsed).toBe(true);
+  await expect(page.locator(".react-flow__edge")).toHaveCount(DEMO_EDGES - 1);
+  await expect(card.locator(".react-flow__handle.is-proxy")).toHaveCount(4);
+  for (const id of ["sc-01", "sc-02"]) {
+    expect((await drive<Summary>(page, "read_node", { id })).parentId, `${id} survives a re-settle`).toBe("beat-1");
+  }
+  await expectCanonical(page);
+
   // Drag the collapsed card by its header: the hidden children ride along.
   const before = await drive<Summary>(page, "read_node", { id: "beat-1" });
   const head = node(page, "beat-1").locator(".bd-collapsed-head");
