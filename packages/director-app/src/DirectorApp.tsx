@@ -1019,10 +1019,38 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         );
       },
       // [U0] stubs — each unit replaces its own method body. Keep the note text; tests grep it.
-      setBypassed: () => setNote("not implemented yet [U2] setBypassed"),
-      setNodeColor: () => setNote("not implemented yet [U2] setNodeColor"),
-      setNodeCollapsed: () => setNote("not implemented yet [U2] setNodeCollapsed"),
-      deleteNode: () => setNote("not implemented yet [U2] deleteNode"),
+      // [U2] leaf chrome — leaves only; a Beat has its own verbs (setColor, toggleCollapse, deleteContainer).
+      setBypassed(nodeId, bypassed) {
+        withCurrent((ns, es) => settle(ns.map((n) => (n.id === nodeId && !isContainer(n) ? ({ ...n, data: { ...n.data, bypassed } } as RFNode) : n)), es, { reparent: false }));
+      },
+      setNodeColor(nodeId, color) {
+        // Clearing REMOVES the key rather than storing `undefined`, so the swatch's "no tint"
+        // and the agent's `set_node_color {color: null}` leave a node in the same shape.
+        withCurrent((ns, es) =>
+          settle(
+            ns.map((n) => {
+              if (n.id !== nodeId || isContainer(n)) return n;
+              const data = { ...n.data } as Record<string, unknown>;
+              if (color) data.color = color;
+              else delete data.color;
+              return { ...n, data } as RFNode;
+            }),
+            es,
+            { reparent: false },
+          ),
+        );
+      },
+      setNodeCollapsed(nodeId, collapsed) {
+        withCurrent((ns, es) => settle(ns.map((n) => (n.id === nodeId && !isContainer(n) ? ({ ...n, data: { ...n.data, collapsed } } as RFNode) : n)), es, { reparent: false }));
+      },
+      deleteNode(nodeId) {
+        withCurrent((ns, es) => {
+          const target = ns.find((n) => n.id === nodeId);
+          if (!target || isContainer(target)) return;
+          setNote(`deleted ${target.data.label}`);
+          settle(ns.filter((n) => n.id !== nodeId), es.filter((e) => e.source !== nodeId && e.target !== nodeId), { reparent: false });
+        });
+      },
       duplicate: () => {
         setNote("not implemented yet [U3] duplicate");
         return [];
