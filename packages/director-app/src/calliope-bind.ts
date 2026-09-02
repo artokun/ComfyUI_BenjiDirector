@@ -17,7 +17,8 @@
 // twice. Node ids embed the Calliope id (`cal-sc-12`) so a write-back can find its row.
 
 import type { GraphEdge } from "@benjidirector/graph-core";
-import type { SceneRow, StoryBundle } from "@benjidirector/calliope-client";
+import type { JobRow, SceneRow, StoryBundle } from "@benjidirector/calliope-client";
+import { jobsStateFrom, renderStatusOf } from "./live.js";
 import { asset, beat, scene, type DirectorNode } from "./model.js";
 
 export const CAL_PREFIX = { scene: "cal-sc-", beat: "cal-beat-", character: "cal-char-", location: "cal-loc-", item: "cal-item-" } as const;
@@ -44,6 +45,8 @@ export function calliopeRef(nodeId: string): { kind: keyof typeof CAL_PREFIX; id
 export interface CalliopeProjectData {
   story: StoryBundle;
   scenes: SceneRow[];
+  /** When given, each scene's `renderStatus` is stamped from its latest video job (see `live.ts`). */
+  jobs?: JobRow[];
 }
 
 interface DirectorSceneSettings {
@@ -82,6 +85,7 @@ export function projectToGraph(data: CalliopeProjectData): { nodes: DirectorNode
   const nodes: DirectorNode[] = [];
   const edges: GraphEdge[] = [];
   const { story } = data;
+  const jobsState = data.jobs ? jobsStateFrom(data.jobs) : null;
 
   // ── assets down the left ──
   let ay = 60;
@@ -137,6 +141,7 @@ export function projectToGraph(data: CalliopeProjectData): { nodes: DirectorNode
           durationSec: s.duration_sec ?? undefined,
           videoPath: s.video_path ?? undefined,
           promoted: ds.promoted,
+          ...(jobsState ? { renderStatus: renderStatusOf(jobsState, s.id, !!s.video_path) } : {}),
         },
         parentId,
       ),
