@@ -49,11 +49,13 @@ import { applyIntents, diffForCalliope } from "./calliope-sync.js";
 import { applyTopology, captureTopology, loadTopology, saveTopology, type RailLabels } from "./topology.js";
 import { ActionsContext, type EditorActions } from "./actions.js";
 import {
-  blueprintIdFromName,
-  instantiateBlueprint,
+  blueprintDialogs,
+  blueprintVersion,
+  deleteBlueprint as deleteStoredBlueprint,
   loadBlueprints,
   serializeSubtree,
-  writeBlueprints,
+  stampBlueprint,
+  storeBlueprint,
   type Blueprint,
 } from "./blueprints.js";
 import { EdgeActionsContext, edgeTypes, type EdgeActions } from "./edges.jsx";
@@ -887,15 +889,55 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     (bp: Blueprint, at: { x: number; y: number }) => {
       setPalette(null);
       withCurrent((ns, es) => {
-        const inst = instantiateBlueprint(bp, at);
-        const merged = [...ns, ...asRF(inst.nodes)];
-        const mergedEdges = [...es, ...asRFEdges(inst.edges)];
-        if (inst.promote) {
-          const out = promoteToSubgraph(inst.rootId, asCore(merged), asCoreEdges(mergedEdges), directorHost);
-          settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
-        } else settle(merged, mergedEdges, { reparent: false });
+        // Promotion, pinned rails, blueprint linkage and selection all happen in the stamp;
+        // settle's reconcile then wires the pinned rails' relays.
+        const out = stampBlueprint(bp, at, asCore(ns), asCoreEdges(es));
+        settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
         setNote(`placed blueprint “${bp.label}”`);
       });
+    },
+    [settle, withCurrent],
+  );
+
+  /**
+   * [U7] Put a container into the library — as a new blueprint, or as the next version of
+   * `into` — and link the container to what was stored.
+   */
+  const commitBlueprint = useCallback(
+    (containerId: string, name: string, into?: string): Blueprint | undefined => {
+      const all = nodesRef.current as RFNode[];
+      const target = all.find((n) => n.id === containerId);
+      // The dialog is async: the Beat can be gone by the time the user hits Save.
+      if (!target || !isContainer(target)) {
+        setNote(`no Beat “${containerId}” to save — it may have been deleted`);
+        return undefined;
+      }
+      // Store the LOGICAL wiring: rails are derived, so a saved subgraph is dissolved first
+      // and re-promoted on placement through the same algebra that built it. The rails
+      // themselves travel as the blueprint's interface, read from the graph BEFORE dissolve.
+      const wasSubgraph = target.type === SUBGRAPH_TYPE;
+      const logical = wasSubgraph
+        ? dissolveSubgraph(containerId, asCore(all), asCoreEdges(edgesRef.current))
+        : { nodes: asCore(all), edges: asCoreEdges(edgesRef.current) };
+      let bp: Blueprint;
+      try {
+        bp = storeBlueprint(serializeSubtree(containerId, logical.nodes, logical.edges, wasSubgraph, asCore(all)), name, into);
+      } catch (err) {
+        setNote(err instanceof Error ? err.message : String(err));
+        return undefined;
+      }
+      setBlueprints(loadBlueprints());
+      withCurrent(
+        (ns, es) =>
+          settle(
+            ns.map((n) => (n.id === containerId ? ({ ...n, data: { ...n.data, blueprintId: bp.id, blueprintVersion: blueprintVersion(bp) } } as RFNode) : n)),
+            es,
+            { reparent: false },
+          ),
+        { history: false },
+      );
+      setNote(into ? `updated blueprint “${bp.label}” — v${blueprintVersion(bp)}` : `saved blueprint “${bp.label}”`);
+      return bp;
     },
     [settle, withCurrent],
   );
@@ -1058,17 +1100,78 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         );
       },
       // [U0] stubs — each unit replaces its own method body. Keep the note text; tests grep it.
-      setBypassed: () => setNote("not implemented yet [U2] setBypassed"),
-      setNodeColor: () => setNote("not implemented yet [U2] setNodeColor"),
-      setNodeCollapsed: () => setNote("not implemented yet [U2] setNodeCollapsed"),
-      deleteNode: () => setNote("not implemented yet [U2] deleteNode"),
+      // [U2] leaf chrome — leaves only; a Beat has its own verbs (setColor, toggleCollapse, deleteContainer).
+      setBypassed(nodeId, bypassed) {
+        withCurrent((ns, es) => settle(ns.map((n) => (n.id === nodeId && !isContainer(n) ? ({ ...n, data: { ...n.data, bypassed } } as RFNode) : n)), es, { reparent: false }));
+      },
+      setNodeColor(nodeId, color) {
+        // Clearing REMOVES the key rather than storing `undefined`, so the swatch's "no tint"
+        // and the agent's `set_node_color {color: null}` leave a node in the same shape.
+        withCurrent((ns, es) =>
+          settle(
+            ns.map((n) => {
+              if (n.id !== nodeId || isContainer(n)) return n;
+              const data = { ...n.data } as Record<string, unknown>;
+              if (color) data.color = color;
+              else delete data.color;
+              return { ...n, data } as RFNode;
+            }),
+            es,
+            { reparent: false },
+          ),
+        );
+      },
+      setNodeCollapsed(nodeId, collapsed) {
+        withCurrent((ns, es) => settle(ns.map((n) => (n.id === nodeId && !isContainer(n) ? ({ ...n, data: { ...n.data, collapsed } } as RFNode) : n)), es, { reparent: false }));
+      },
+      deleteNode(nodeId) {
+        withCurrent((ns, es) => {
+          const target = ns.find((n) => n.id === nodeId);
+          if (!target || isContainer(target)) return;
+          setNote(`deleted ${target.data.label}`);
+          settle(ns.filter((n) => n.id !== nodeId), es.filter((e) => e.source !== nodeId && e.target !== nodeId), { reparent: false });
+        });
+      },
       duplicate: () => {
         setNote("not implemented yet [U3] duplicate");
         return [];
       },
       deleteContainer: () => setNote("not implemented yet [U5] deleteContainer"),
-      updateBlueprint: () => setNote("not implemented yet [U7] updateBlueprint"),
-      deleteBlueprint: () => setNote("not implemented yet [U7] deleteBlueprint"),
+      updateBlueprint(blueprintId, containerId) {
+        const bp = loadBlueprints()[blueprintId];
+        if (!bp) return setNote(`no blueprint “${blueprintId}”`);
+        if (bp.builtin) return setNote(`“${bp.label}” ships with the editor — save a copy under a new name`);
+        const all = nodesRef.current as RFNode[];
+        const linked = all.filter((n) => isContainer(n) && rails(n).blueprintId === blueprintId);
+        const target = containerId ? all.find((n) => n.id === containerId) : linked.length === 1 ? linked[0] : undefined;
+        if (!target || !isContainer(target)) {
+          return setNote(
+            containerId
+              ? `“${containerId}” is not a Beat`
+              : linked.length
+                ? `${linked.length} Beats are linked to “${bp.label}” — select the one to update from`
+                : `no Beat on the canvas is linked to “${bp.label}”`,
+          );
+        }
+        commitBlueprint(target.id, bp.label, blueprintId);
+        return undefined;
+      },
+      deleteBlueprint(blueprintId, opts) {
+        const bp = loadBlueprints()[blueprintId];
+        if (!bp) return setNote(`no blueprint “${blueprintId}”`);
+        if (bp.builtin) return setNote(`“${bp.label}” ships with the editor and cannot be deleted`);
+        const go = () => {
+          if (!deleteStoredBlueprint(blueprintId)) return setNote(`could not delete “${bp.label}”`);
+          setBlueprints(loadBlueprints());
+          setNote(`deleted blueprint “${bp.label}”`);
+          return undefined;
+        };
+        if (opts?.confirm === false) return go();
+        const dlg = blueprintDialogs();
+        if (!dlg) return setNote("the blueprint dialog is not mounted");
+        void dlg.confirmDelete(bp).then((ok) => ok && go());
+        return undefined;
+      },
       setNoteText: () => setNote("not implemented yet [U9] setNoteText"),
       togglePin(nodeId) {
         withCurrent((ns, es) => {
@@ -1108,41 +1211,33 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         });
       },
       saveBlueprint(containerId, presetName) {
-        const all = nodesRef.current as RFNode[];
-        const target = all.find((n) => n.id === containerId);
+        const target = (nodesRef.current as RFNode[]).find((n) => n.id === containerId);
         if (!target || !isContainer(target)) return;
-        const name = (presetName ?? window.prompt("Blueprint name", target.data.label) ?? "").trim();
-        if (!name) return;
-        // Store the LOGICAL wiring: rails are derived, so a saved subgraph is dissolved first
-        // and re-promoted on placement through the same algebra that built it.
-        const wasSubgraph = target.type === SUBGRAPH_TYPE;
-        const logical = wasSubgraph
-          ? dissolveSubgraph(containerId, asCore(all), asCoreEdges(edgesRef.current))
-          : { nodes: asCore(all), edges: asCoreEdges(edgesRef.current) };
-        const existing = loadBlueprints();
-        const linked = rails(target).blueprintId && existing[rails(target).blueprintId!] ? rails(target).blueprintId! : undefined;
-        const id = linked ?? blueprintIdFromName(name, existing);
-        const bp: Blueprint = { id, label: name, savedAt: Date.now(), ...serializeSubtree(containerId, logical.nodes, logical.edges, wasSubgraph) };
-        const next = { ...existing, [id]: bp };
-        writeBlueprints(next);
-        setBlueprints(next);
-        withCurrent(
-          (ns, es) =>
-            settle(
-              ns.map((n) =>
-                n.id === containerId
-                  ? ({ ...n, data: { ...n.data, blueprintId: id, blueprintVersion: (rails(n).blueprintVersion ?? 0) + 1 } } as RFNode)
-                  : n,
-              ),
-              es,
-              { reparent: false },
-            ),
-          { history: false },
-        );
-        setNote(linked ? `updated blueprint “${name}”` : `saved blueprint “${name}”`);
+        const bid = rails(target).blueprintId;
+        const prior = bid ? loadBlueprints()[bid] : undefined;
+        // Linked to a blueprint that still exists and is the user's: a save may UPDATE it. A
+        // built-in it was placed from is not updatable, so that link only informs the dialog.
+        const linked = prior && !prior.builtin ? prior : undefined;
+        if (presetName !== undefined) {
+          // The agent's path: a name, no dialog. Re-saves the linked blueprint when there is one.
+          const name = presetName.trim();
+          if (name) commitBlueprint(containerId, name, linked?.id);
+          return;
+        }
+        const dlg = blueprintDialogs();
+        if (!dlg) return setNote("the blueprint dialog is not mounted");
+        void dlg
+          .save({
+            defaultName: linked?.label ?? target.data.label,
+            ...(prior ? { linked: { id: prior.id, label: prior.label, version: blueprintVersion(prior), builtin: !!prior.builtin } } : {}),
+          })
+          .then((r) => {
+            if (r) commitBlueprint(containerId, r.name, r.mode === "update" && linked ? linked.id : undefined);
+          });
+        return undefined;
       },
     }),
-    [convert, settle, withCurrent],
+    [commitBlueprint, convert, settle, withCurrent],
   );
 
   const edgeActions: EdgeActions = useMemo(
@@ -1492,20 +1587,15 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
             return { id: target.id, name: args.name };
           }, { history: false });
         case "list_blueprints":
-          return Object.values(loadBlueprints()).map((b) => ({ id: b.id, label: b.label, nodes: b.nodes.length, savedAt: b.savedAt }));
+          return Object.values(loadBlueprints()).map((b) => ({ id: b.id, label: b.label, nodes: b.nodes.length, savedAt: b.savedAt, version: blueprintVersion(b), builtin: !!b.builtin }));
         case "apply_blueprint": {
           const bp = loadBlueprints()[str(args.blueprint_id, "blueprint_id")];
           if (!bp) throw new Error(`no blueprint "${String(args.blueprint_id)}" — list_blueprints names them`);
           const at = { x: num(args.x, "x"), y: num(args.y, "y") };
           return run((ns, es) => {
-            const inst = instantiateBlueprint(bp, at);
-            const merged = [...ns, ...asRF(inst.nodes)];
-            const mergedEdges = [...es, ...asRFEdges(inst.edges)];
-            if (inst.promote) {
-              const out = promoteToSubgraph(inst.rootId, asCore(merged), asCoreEdges(mergedEdges), directorHost);
-              settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
-            } else settle(merged, mergedEdges, { reparent: false });
-            return { id: inst.rootId, blueprint: bp.id };
+            const out = stampBlueprint(bp, at, asCore(ns), asCoreEdges(es));
+            settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
+            return { id: out.rootId, blueprint: bp.id, version: blueprintVersion(bp) };
           });
         }
         default: {
@@ -1626,21 +1716,6 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
               <Slot name="toolbar-left" />
               <span className="bd-spacer" />
               <Slot name="toolbar-right" />
-              {status?.reachable ? (
-                <select
-                  className="bd-project"
-                  value={loadedProject ?? ""}
-                  title="Which Calliope project the canvas shows"
-                  onChange={(e) => void loadProject(e.target.value === "" ? null : Number(e.target.value))}
-                >
-                  <option value="">demo project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
               {loadedProject !== null ? (
                 <span className={`bd-sync is-${syncState}`} title="Write-back to Calliope">
                   {syncState === "saving" ? "saving…" : syncState === "saved" ? "saved" : syncState === "error" ? "save failed" : "synced"}

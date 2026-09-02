@@ -26,7 +26,6 @@
 import {
   Handle,
   NodeResizer,
-  NodeToolbar,
   Position,
   useUpdateNodeInternals,
   type NodeProps,
@@ -39,6 +38,8 @@ import { ACCENT, ContainerToolbar } from "./container-toolbar.jsx";
 import { Icon } from "./icons.js";
 import { LeafResizeGrip } from "./leaf-resize.jsx"; // [U1]
 import { RenderBadge } from "./render-badge.jsx";
+import { BYPASS_TITLE, headerHandleLayout, leafClassName, leafStyle } from "./node-chrome.js";
+import { LeafCaret, LeafHub, LeafInfo, LeafToolbar, useLeafInternals } from "./node-chrome.jsx";
 import {
   PORT_COLOR,
   type AssetData,
@@ -76,101 +77,94 @@ const dot = (type: DirectorPortType) => ({
   border: "2px solid #14141a",
 });
 
-/**
- * The pin.
- *
- * ifr-node-lab's yellow pin, and it does one specific thing: it decides whether this node
- * shows up on its Beat's face when that Beat is collapsed. A collapsed container is meant to
- * read as a composed node — the few controls its author chose to surface — not as an opaque
- * box, and this is the only way to choose them.
- */
-function PinToolbar({
-  id,
-  promoted,
-  visible,
-  inSubgraph,
-}: {
-  id: string;
-  promoted: boolean;
-  visible: boolean;
-  inSubgraph: boolean;
-}) {
-  const actions = useActions();
-  // Outside a subgraph there is no collapsed face for a pin to put anything on, so offering
-  // one would be a control that silently does nothing.
-  if (!inSubgraph) return null;
-  return (
-    <NodeToolbar isVisible={visible} position={Position.Top} className="bd-nodebar">
-      <button
-        type="button"
-        className={`bd-pin${promoted ? " is-on" : ""}`}
-        title={
-          promoted
-            ? "Promoted — shows on the collapsed Beat's face (click to unpromote)"
-            : "Promote — show this on the collapsed Beat's face"
-        }
-        onClick={(e) => {
-          e.stopPropagation();
-          actions?.togglePin(id);
-        }}
-      >
-        <Icon name="pin" />
-      </button>
-    </NodeToolbar>
-  );
-}
+// ── leaves ─────────────────────────────────────────────────────────────────────────────────
+//
+// A leaf's chrome — the selected-node toolbar (TYPE · colour · pin · bypass · delete), the
+// header chevron that collapses it to its title bar, the (i) tip — lives in node-chrome.tsx;
+// the renderers below only decide what a Scene and an Asset show inside that chrome.
+// Collapsed, the card is its header and every handle converges on the header's edges (each
+// keeps its id, so the wires stay attached); the leaf hook re-measures on the flip.
 
 export function SceneNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as SceneData;
-  const ins = d.ports.filter((p) => p.isInput);
-  const outs = d.ports.filter((p) => !p.isInput);
+  const { ins, outs } = headerHandleLayout(d.ports);
+  const collapsed = !!d.collapsed;
+  useLeafInternals(id, collapsed);
   return (
-    <div className={`bd-node bd-scene${selected ? " is-selected" : ""}${d.promoted ? " is-promoted" : ""}`}>
-      <PinToolbar id={id} promoted={!!d.promoted} visible={!!selected} inSubgraph={!!d.inSubgraph} />
+    <div
+      className={leafClassName("bd-scene", { selected: !!selected, promoted: !!d.promoted, bypassed: !!d.bypassed, collapsed })}
+      style={leafStyle(d)}
+      title={d.bypassed ? BYPASS_TITLE : undefined}
+    >
+      <LeafToolbar id={id} data={d} visible={!!selected} />
       <div className="bd-node-title">
-        <span className="bd-title-grow">{d.heading}</span>
+        {collapsed ? <LeafHub side="in" ports={ins} /> : null}
+        <LeafCaret id={id} collapsed={collapsed} />
+        <span className="bd-title-grow">
+          <EditableTitle id={id} label={d.heading} />
+        </span>
         {d.durationSec !== undefined ? <span className="bd-chip">{d.durationSec}s</span> : null}
+        <LeafInfo data={d} />
+        {collapsed ? <LeafHub side="out" ports={outs} /> : null}
       </div>
-      <RenderBadge id={id} videoPath={d.videoPath} />
-      <div className="bd-ports">
-        {ins.map((p) => (
-          <div className="bd-port" key={p.id}>
-            <Handle type="target" position={Position.Left} id={p.id} style={dot(p.type as DirectorPortType)} />
-            <span>{p.label}</span>
+      {collapsed ? null : (
+        <>
+          <RenderBadge id={id} videoPath={d.videoPath} />
+          <div className="bd-ports">
+            {ins.map((p) => (
+              <div className="bd-port" key={p.id}>
+                <Handle type="target" position={Position.Left} id={p.id} style={dot(p.type as DirectorPortType)} />
+                <span>{p.label}</span>
+              </div>
+            ))}
+            {outs.map((p) => (
+              <div className="bd-port bd-port-out" key={p.id}>
+                <span>{p.label}</span>
+                <Handle type="source" position={Position.Right} id={p.id} style={dot(p.type as DirectorPortType)} />
+              </div>
+            ))}
           </div>
-        ))}
-        {outs.map((p) => (
-          <div className="bd-port bd-port-out" key={p.id}>
-            <span>{p.label}</span>
-            <Handle type="source" position={Position.Right} id={p.id} style={dot(p.type as DirectorPortType)} />
-          </div>
-        ))}
-      </div>
-      <LeafResizeGrip /> {/* [U1] */}
+        </>
+      )}
+      {/* [U1] the resize grip; [U2] a collapsed leaf is header-only, so there is nothing to size. */}
+      {collapsed ? null : <LeafResizeGrip />}
     </div>
   );
 }
 
 export function AssetNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as AssetData;
-  const out = d.ports[0];
+  const { outs } = headerHandleLayout(d.ports);
+  const collapsed = !!d.collapsed;
+  useLeafInternals(id, collapsed);
   const icon = <Icon name={d.asset === "character" ? "user" : d.asset === "location" ? "mapPin" : "box"} />;
   return (
-    <div className={`bd-node bd-asset${selected ? " is-selected" : ""}${d.promoted ? " is-promoted" : ""}`}>
-      <PinToolbar id={id} promoted={!!d.promoted} visible={!!selected} inSubgraph={!!d.inSubgraph} />
+    <div
+      className={leafClassName("bd-asset", { selected: !!selected, promoted: !!d.promoted, bypassed: !!d.bypassed, collapsed })}
+      style={leafStyle(d)}
+      title={d.bypassed ? BYPASS_TITLE : undefined}
+    >
+      <LeafToolbar id={id} data={d} visible={!!selected} />
       <div className="bd-node-title">
+        <LeafCaret id={id} collapsed={collapsed} />
         <span className="bd-icon">{icon}</span>
-        {d.label}
+        <span className="bd-title-grow">
+          <EditableTitle id={id} label={d.label} />
+        </span>
+        <LeafInfo data={d} />
+        {collapsed ? <LeafHub side="out" ports={outs} /> : null}
       </div>
-      {out ? (
+      {collapsed || !outs.length ? null : (
         <div className="bd-ports">
-          <div className="bd-port bd-port-out">
-            <span>{out.label}</span>
-            <Handle type="source" position={Position.Right} id={out.id} style={dot(out.type as DirectorPortType)} />
-          </div>
+          {outs.map((p) => (
+            <div className="bd-port bd-port-out" key={p.id}>
+              <span>{p.label}</span>
+              <Handle type="source" position={Position.Right} id={p.id} style={dot(p.type as DirectorPortType)} />
+            </div>
+          ))}
         </div>
-      ) : null}
-      <LeafResizeGrip /> {/* [U1] */}
+      )}
+      {collapsed ? null : <LeafResizeGrip />}
     </div>
   );
 }
