@@ -30,6 +30,8 @@ export function summarizeNode(n: RFNode): Record<string, unknown> {
         kind: "scene",
         heading: d.heading,
         durationSec: d.durationSec ?? null,
+        action: d.action ?? null,
+        dialog: d.dialog ?? null,
         videoPath: d.videoPath ?? null,
         promoted: !!d.promoted,
         inSubgraph: !!d.inSubgraph,

@@ -53,7 +53,7 @@ Args are a flat object. Ids come from `outline`. Positions are absolute canvas c
 | U8a | `fit_view` | `ids?[]` |
 | U8b | `reroute` | `edge_id`, `x`, `y` → `{id}` |
 | U9 | `add_note` / `set_note` | `x`, `y`, `text` / `id`, `text` |
-| U12 | `inspect` | `id` (opens the inspector on a node) |
+| U12 | `inspect` | `id` (opens the inspector on a node); internal-only `if_unselected` re-selects only while nothing else is |
 | U14 | `assets_generate` etc. go through `calliope` (`assets.generate`) — no new command |
 | U15 | `render_scene` | `scene_id` (opens the composer on a scene) |
 
