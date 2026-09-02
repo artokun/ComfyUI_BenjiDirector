@@ -15,6 +15,7 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode, // [U8a]
   getBezierPath,
   useEdgesState,
   useNodesState,
@@ -23,6 +24,7 @@ import {
   type Connection,
   type ConnectionLineComponentProps,
   type Edge,
+  type EdgeChange,
   type FinalConnectionState,
   type Node,
 } from "@xyflow/react";
@@ -49,11 +51,13 @@ import { applyIntents, diffForCalliope } from "./calliope-sync.js";
 import { applyTopology, captureTopology, loadTopology, saveTopology, type RailLabels } from "./topology.js";
 import { ActionsContext, type EditorActions } from "./actions.js";
 import {
-  blueprintIdFromName,
-  instantiateBlueprint,
+  blueprintDialogs,
+  blueprintVersion,
+  deleteBlueprint as deleteStoredBlueprint,
   loadBlueprints,
   serializeSubtree,
-  writeBlueprints,
+  stampBlueprint,
+  storeBlueprint,
   type Blueprint,
 } from "./blueprints.js";
 import { EdgeActionsContext, edgeTypes, type EdgeActions } from "./edges.jsx";
@@ -74,7 +78,7 @@ import {
 import { nodeTypes } from "./nodes.jsx";
 import { Palette, type PaletteItem } from "./palette.jsx";
 // ── [U0] foundation ──
-import { useDisplayedGraph } from "./collapse-view.js";
+import { canonicalEdgeChanges, proxyHandlesFor, useDisplayedGraph } from "./collapse-view.js";
 import { DirectorContext, type DirectorCtx } from "./director-context.jsx";
 import { resolveDrive, type DriveKit } from "./drive-registry.js";
 import { Icon } from "./icons.jsx";
@@ -82,8 +86,17 @@ import { ModalProvider } from "./modal.jsx";
 import { summarizeEdge, summarizeNode } from "./outline.js";
 import { loadAutosave } from "./persistence.js"; // [U4]
 import { usePanels } from "./panels.js";
+import { DirectorMiniMap } from "./selection-toolbar.jsx"; // [U8a]
+import { MULTI_SELECT_KEYS, useSnapToGrid } from "./selection-model.js"; // [U8a]
 import { Slot } from "./slots.jsx";
 import { PALETTE_KINDS } from "./model.js";
+// ── [U1] stability: measurement kick + z-order ──
+import { KICK_INTERVAL_MS, KICK_MAX_TICKS, unmeasuredIds, visibleIdKey } from "./stability.js";
+import { applyZOrder, needsZOrder } from "./z-order.js";
+// ── [U3] clipboard, hotkeys, help ──
+import { duplicateNodes } from "./clipboard.js";
+import { openHelp } from "./help.jsx";
+import { useEditorHotkeys } from "./useEditorHotkeys.js";
 
 // React Flow types node data as an index signature; ours are interfaces. Identical at runtime,
 // so the casts stay confined to these aliases.
@@ -113,16 +126,18 @@ function handleTypes(nodes: RFNode[]): Map<string, DirectorPortType> {
 
 /**
  * Colour each edge by what it carries, hide anything inside a collapsed Beat, derive each
- * container's face and each node's "inside a subgraph" flag.
+ * container's face, its proxy handles, and each node's "inside a subgraph" flag.
  *
- * A node is hidden when ANY ancestor is a collapsed subgraph — not just its direct parent, or
- * a Beat nested two deep would keep rendering its grandchildren on top of the collapsed card.
- * Edges follow their endpoints, which is what makes the inner relays disappear with the
- * children while the outer halves keep terminating on the collapsed card's rails.
+ * A node is hidden when ANY ancestor is a collapsed container — group or subgraph, not just
+ * its direct parent, or a Beat nested two deep would keep rendering its grandchildren on top of
+ * the collapsed card. Edges follow their endpoints in STATE, which is what makes a subgraph's
+ * inner relays disappear with the children while the outer halves keep terminating on the
+ * collapsed card's rails. A plain group has no rails, so its crossings are re-routed at DRAW
+ * time instead (`collapse-view`) onto the proxy handles derived here.
  */
 function decorate(nodes: RFNode[], edges: Edge[]): { nodes: RFNode[]; edges: Edge[] } {
   const byId = new Map(nodes.map((n) => [n.id, n] as const));
-  const collapsed = new Set(nodes.filter((n) => n.type === SUBGRAPH_TYPE && rails(n).collapsed).map((n) => n.id));
+  const collapsed = new Set(nodes.filter((n) => isContainer(n) && rails(n).collapsed).map((n) => n.id));
 
   const ancestorMatches = (n: RFNode, pred: (ancestor: RFNode) => boolean): boolean => {
     let p = n.parentId;
@@ -168,7 +183,14 @@ function decorate(nodes: RFNode[], edges: Edge[]): { nodes: RFNode[]; edges: Edg
         const g = faces[i];
         return !!g && f.id === g.id && f.label === g.label && f.durationSec === g.durationSec && f.videoPath === g.videoPath;
       });
-    return same ? n : ({ ...n, data: { ...n.data, faces } } as RFNode);
+    // A collapsed card's proxy handles: one per hidden descendant port with a wire to the
+    // outside. Derived from the canonical edges, so the card always carries exactly the
+    // handles `displayedEdges` will re-route onto. A card hidden inside another collapsed
+    // container draws nothing, so it needs none.
+    const proxies = collapsed.has(n.id) && !n.hidden ? proxyHandlesFor(n.id, outNodes0, edges) : [];
+    const prevP = rails(n).proxies ?? [];
+    const sameP = prevP.length === proxies.length && prevP.every((p, i) => p.id === proxies[i]?.id && p.type === proxies[i]?.type && p.label === proxies[i]?.label);
+    return same && sameP ? n : ({ ...n, data: { ...n.data, faces, proxies } } as RFNode);
   });
 
   const hidden = new Set(outNodes.filter((n) => n.hidden).map((n) => n.id));
@@ -300,51 +322,83 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   const { screenToFlowPosition, getInternalNode } = useReactFlow();
 
   /**
-   * Force React Flow to measure.
+   * Force React Flow to measure — only what it CAN measure, and only until it has.
    *
    * The pane mounts inside the side panel's overlay while it is sliding in, and React Flow's
    * own ResizeObserver pass does not land in that window: nodes keep `visibility: hidden`
    * (its marker for "not measured"), and because an edge only renders once BOTH endpoints are
    * measured, the canvas comes up with nodes you cannot see and no wires at all.
    * `updateNodeInternals` re-reads dimensions and handle bounds straight from the DOM.
+   *
+   * [U1] Keyed on the SET of visible ids, not the node list. React Flow never measures a
+   * hidden node, so a kick that waited for EVERY node to report a size could not finish while
+   * a Beat was collapsed — and it re-armed on each node-list change: a 60 s interval that
+   * force-remeasured every node and every handle on the canvas, which is what "dragging locks
+   * the tab up" was. Now nothing is armed when everything visible is already measured, a kick
+   * names only the unmeasured nodes, and everything stops the moment the last one measures.
    */
   const updateNodeInternals = useUpdateNodeInternals();
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const nodeIds = useMemo(() => (nodes as RFNode[]).map((n) => n.id).join(","), [nodes]);
+  const visibleIds = useMemo(() => visibleIdKey(nodes as RFNode[]), [nodes]);
   useEffect(() => {
-    const ids = nodeIds ? nodeIds.split(",") : [];
+    const ids = visibleIds ? visibleIds.split(",") : [];
     if (!ids.length) return undefined;
-    const kick = () => updateNodeInternals(ids);
-    // A hidden tab suspends ResizeObserver entirely, so the fixed timers below can all fire
-    // into a tab nothing will measure. Keep nudging on a slow interval until every node
-    // reports a size, and again the moment the tab becomes visible — bounded, so a node that
-    // genuinely cannot measure does not keep a timer alive forever.
-    const allMeasured = () => ids.every((id) => !!getInternalNode(id)?.measured?.width);
-    let tries = 0;
-    const iv = setInterval(() => {
-      if (allMeasured() || tries++ > 120) {
-        clearInterval(iv);
-        return;
-      }
-      kick();
-    }, 500);
+    const isMeasured = (id: string) => !!getInternalNode(id)?.measured?.width;
+    const pending = () => unmeasuredIds(ids, isMeasured);
+    if (!pending().length) return undefined;
+    let stopped = false;
+    let ticks = 0;
+    let raf = 0;
+    let iv: ReturnType<typeof setInterval> | undefined;
+    let ro: ResizeObserver | null = null;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     const onVisible = () => {
       if (document.visibilityState === "visible") kick();
     };
-    document.addEventListener("visibilitychange", onVisible);
-    const raf = requestAnimationFrame(kick);
-    const timers = [setTimeout(kick, 120), setTimeout(kick, 400), setTimeout(kick, 900)];
-    const el = canvasRef.current;
-    const ro = el ? new ResizeObserver(() => kick()) : null;
-    if (el && ro) ro.observe(el);
-    return () => {
-      clearInterval(iv);
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      if (iv !== undefined) clearInterval(iv);
       document.removeEventListener("visibilitychange", onVisible);
       cancelAnimationFrame(raf);
       for (const t of timers) clearTimeout(t);
       ro?.disconnect();
     };
-  }, [getInternalNode, nodeIds, updateNodeInternals]);
+    const kick = () => {
+      if (stopped) return;
+      const left = pending();
+      if (!left.length) {
+        stop();
+        return;
+      }
+      updateNodeInternals(left);
+    };
+    raf = requestAnimationFrame(kick);
+    timers.push(setTimeout(kick, 120), setTimeout(kick, 400), setTimeout(kick, 900));
+    // A hidden tab suspends ResizeObserver entirely, so the fixed timers above can all fire
+    // into a tab nothing will measure. Keep nudging on a slow interval, and again the moment
+    // the tab becomes visible — bounded, so a node that genuinely cannot measure does not
+    // keep a timer alive forever.
+    iv = setInterval(() => {
+      if (++ticks > KICK_MAX_TICKS) stop();
+      else kick();
+    }, KICK_INTERVAL_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    const el = canvasRef.current;
+    ro = el ? new ResizeObserver(() => kick()) : null;
+    if (el && ro) ro.observe(el);
+    return stop;
+  }, [getInternalNode, visibleIds, updateNodeInternals]);
+
+  // [U1] Z-order (z-order.ts): containers pinned below the wires, leaves above. Constructors
+  // stamp it; this heals whatever arrives without it — a blueprint, an imported graph — once,
+  // in state, so React Flow and the outline agree. View state, so it does not go through
+  // settle: nothing about the graph changes, only who paints over whom.
+  useEffect(() => {
+    if (needsZOrder(nodes as RFNode[])) setNodes((ns) => applyZOrder(ns as RFNode[]));
+  }, [nodes, setNodes]);
+  const bumpZ = useCallback((id: string) => setNodes((ns) => applyZOrder(ns as RFNode[], id)), [setNodes]);
+  const onNodeClick = useCallback((_e: unknown, node: Node) => bumpZ(node.id), [bumpZ]);
 
   const config = useMemo(() => resolveConfig(calliopeBaseUrl ? { baseUrl: calliopeBaseUrl } : {}), [calliopeBaseUrl]);
   const client = useMemo(() => new CalliopeClient(config), [config]);
@@ -511,21 +565,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     return undefined;
   }, [setEdges, setNodes, withCurrent]);
 
-  // Ctrl/Cmd+Z and Ctrl+Shift+Z, scoped to the pane so they never steal ComfyUI's own undo
-  // while the user is working on the canvas behind us.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
-      const root = canvasRef.current?.closest(".bd-root");
-      if (!root || (!root.contains(document.activeElement) && !root.matches(":hover"))) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.shiftKey) redo();
-      else undo();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [redo, undo]);
+  // The keyboard (undo/redo included) is `useEditorHotkeys`, mounted below once `drive` exists.
 
   /** Repair: treat the EDGES as the source of truth and re-derive every boundary from them. */
   const repair = useCallback(() => {
@@ -552,11 +592,15 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   }, []);
   const settleRef = useRef(settle);
   settleRef.current = settle;
-  const onNodeDragStop = useCallback(() => {
-    const prev = dragBaseline.current ?? undefined;
-    dragBaseline.current = null;
-    withCurrent((ns, es) => settle(ns, es, { prev }), { history: false });
-  }, [settle, withCurrent]);
+  const onNodeDragStop = useCallback(
+    (_e: unknown, node: Node) => {
+      const prev = dragBaseline.current ?? undefined;
+      dragBaseline.current = null;
+      // [U1] The dropped leaf rises to the top of the stack (z-order.ts); a Beat stays pinned.
+      withCurrent((ns, es) => settle(applyZOrder(ns, node.id), es, { prev }), { history: false });
+    },
+    [settle, withCurrent],
+  );
 
   /**
    * Load a Calliope project onto the canvas.
@@ -849,24 +893,67 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
     (bp: Blueprint, at: { x: number; y: number }) => {
       setPalette(null);
       withCurrent((ns, es) => {
-        const inst = instantiateBlueprint(bp, at);
-        const merged = [...ns, ...asRF(inst.nodes)];
-        const mergedEdges = [...es, ...asRFEdges(inst.edges)];
-        if (inst.promote) {
-          const out = promoteToSubgraph(inst.rootId, asCore(merged), asCoreEdges(mergedEdges), directorHost);
-          settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
-        } else settle(merged, mergedEdges, { reparent: false });
+        // Promotion, pinned rails, blueprint linkage and selection all happen in the stamp;
+        // settle's reconcile then wires the pinned rails' relays.
+        const out = stampBlueprint(bp, at, asCore(ns), asCoreEdges(es));
+        settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
         setNote(`placed blueprint “${bp.label}”`);
       });
     },
     [settle, withCurrent],
   );
 
-  /** Delete the selection, and every edge that touched it, then reconcile. */
+  /**
+   * [U7] Put a container into the library — as a new blueprint, or as the next version of
+   * `into` — and link the container to what was stored.
+   */
+  const commitBlueprint = useCallback(
+    (containerId: string, name: string, into?: string): Blueprint | undefined => {
+      const all = nodesRef.current as RFNode[];
+      const target = all.find((n) => n.id === containerId);
+      // The dialog is async: the Beat can be gone by the time the user hits Save.
+      if (!target || !isContainer(target)) {
+        setNote(`no Beat “${containerId}” to save — it may have been deleted`);
+        return undefined;
+      }
+      // Store the LOGICAL wiring: rails are derived, so a saved subgraph is dissolved first
+      // and re-promoted on placement through the same algebra that built it. The rails
+      // themselves travel as the blueprint's interface, read from the graph BEFORE dissolve.
+      const wasSubgraph = target.type === SUBGRAPH_TYPE;
+      const logical = wasSubgraph
+        ? dissolveSubgraph(containerId, asCore(all), asCoreEdges(edgesRef.current))
+        : { nodes: asCore(all), edges: asCoreEdges(edgesRef.current) };
+      let bp: Blueprint;
+      try {
+        bp = storeBlueprint(serializeSubtree(containerId, logical.nodes, logical.edges, wasSubgraph, asCore(all)), name, into);
+      } catch (err) {
+        setNote(err instanceof Error ? err.message : String(err));
+        return undefined;
+      }
+      setBlueprints(loadBlueprints());
+      withCurrent(
+        (ns, es) =>
+          settle(
+            ns.map((n) => (n.id === containerId ? ({ ...n, data: { ...n.data, blueprintId: bp.id, blueprintVersion: blueprintVersion(bp) } } as RFNode) : n)),
+            es,
+            { reparent: false },
+          ),
+        { history: false },
+      );
+      setNote(into ? `updated blueprint “${bp.label}” — v${blueprintVersion(bp)}` : `saved blueprint “${bp.label}”`);
+      return bp;
+    },
+    [settle, withCurrent],
+  );
+
+  /** Delete the selection — nodes and selected wires — and every edge that touched it, then reconcile. */
   const deleteSelection = useCallback(() => {
     withCurrent((ns, es) => {
       const doomed = new Set(ns.filter((n) => n.selected).map((n) => n.id));
-      if (!doomed.size) {
+      // [U3] Selected wires go too: the Delete key is ours now (React Flow's own delete
+      // bypassed the undo snapshot), so a selected edge must still be deletable from it.
+      const wires = new Set(es.filter((e) => e.selected).map((e) => e.id));
+      if (!doomed.size && !wires.size) {
         setNote("nothing selected");
         return;
       }
@@ -882,10 +969,10 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
           }
         }
       }
-      setNote(`deleted ${doomed.size} node${doomed.size === 1 ? "" : "s"}`);
+      setNote(doomed.size ? `deleted ${doomed.size} node${doomed.size === 1 ? "" : "s"}` : `deleted ${wires.size} wire${wires.size === 1 ? "" : "s"}`);
       settle(
         ns.filter((n) => !doomed.has(n.id)),
-        es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target)),
+        es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target) && !wires.has(e.id)),
         { reparent: false },
       );
     });
@@ -1020,18 +1107,95 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         );
       },
       // [U0] stubs — each unit replaces its own method body. Keep the note text; tests grep it.
-      setBypassed: () => setNote("not implemented yet [U2] setBypassed"),
-      setNodeColor: () => setNote("not implemented yet [U2] setNodeColor"),
-      setNodeCollapsed: () => setNote("not implemented yet [U2] setNodeCollapsed"),
-      deleteNode: () => setNote("not implemented yet [U2] deleteNode"),
-      duplicate: () => {
-        setNote("not implemented yet [U3] duplicate");
-        return [];
+      // [U2] leaf chrome — leaves only; a Beat has its own verbs (setColor, toggleCollapse, deleteContainer).
+      setBypassed(nodeId, bypassed) {
+        withCurrent((ns, es) => settle(ns.map((n) => (n.id === nodeId && !isContainer(n) ? ({ ...n, data: { ...n.data, bypassed } } as RFNode) : n)), es, { reparent: false }));
+      },
+      setNodeColor(nodeId, color) {
+        // Clearing REMOVES the key rather than storing `undefined`, so the swatch's "no tint"
+        // and the agent's `set_node_color {color: null}` leave a node in the same shape.
+        withCurrent((ns, es) =>
+          settle(
+            ns.map((n) => {
+              if (n.id !== nodeId || isContainer(n)) return n;
+              const data = { ...n.data } as Record<string, unknown>;
+              if (color) data.color = color;
+              else delete data.color;
+              return { ...n, data } as RFNode;
+            }),
+            es,
+            { reparent: false },
+          ),
+        );
+      },
+      setNodeCollapsed(nodeId, collapsed) {
+        withCurrent((ns, es) => settle(ns.map((n) => (n.id === nodeId && !isContainer(n) ? ({ ...n, data: { ...n.data, collapsed } } as RFNode) : n)), es, { reparent: false }));
+      },
+      deleteNode(nodeId) {
+        withCurrent((ns, es) => {
+          const target = ns.find((n) => n.id === nodeId);
+          if (!target || isContainer(target)) return;
+          setNote(`deleted ${target.data.label}`);
+          settle(ns.filter((n) => n.id !== nodeId), es.filter((e) => e.source !== nodeId && e.target !== nodeId), { reparent: false });
+        });
+      },
+      duplicate(nodeIds) {
+        // [U3] Copy + paste at +40/+40 in one step, clipboard untouched. The copy is cut from
+        // the graph as it stands NOW so the new ids can be returned synchronously; the settle
+        // that lands it queues behind whatever is already in flight, like every action.
+        const out = duplicateNodes(asCore(nodesRef.current as RFNode[]), asCoreEdges(edgesRef.current), nodeIds);
+        if (!out.ids.length) {
+          setNote("nothing to duplicate");
+          return [];
+        }
+        withCurrent((ns, es) => {
+          const pasted = asRF(out.nodes).map((n) => ({ ...n, selected: true }) as RFNode);
+          settle([...ns.map((n) => (n.selected ? ({ ...n, selected: false } as RFNode) : n)), ...pasted], [...es, ...asRFEdges(out.edges)]);
+          setNote(`duplicated ${out.ids.length} node${out.ids.length === 1 ? "" : "s"}`);
+        });
+        return out.ids;
       },
       deleteContainer: () => setNote("not implemented yet [U5] deleteContainer"),
-      updateBlueprint: () => setNote("not implemented yet [U7] updateBlueprint"),
-      deleteBlueprint: () => setNote("not implemented yet [U7] deleteBlueprint"),
-      setNoteText: () => setNote("not implemented yet [U9] setNoteText"),
+      updateBlueprint(blueprintId, containerId) {
+        const bp = loadBlueprints()[blueprintId];
+        if (!bp) return setNote(`no blueprint “${blueprintId}”`);
+        if (bp.builtin) return setNote(`“${bp.label}” ships with the editor — save a copy under a new name`);
+        const all = nodesRef.current as RFNode[];
+        const linked = all.filter((n) => isContainer(n) && rails(n).blueprintId === blueprintId);
+        const target = containerId ? all.find((n) => n.id === containerId) : linked.length === 1 ? linked[0] : undefined;
+        if (!target || !isContainer(target)) {
+          return setNote(
+            containerId
+              ? `“${containerId}” is not a Beat`
+              : linked.length
+                ? `${linked.length} Beats are linked to “${bp.label}” — select the one to update from`
+                : `no Beat on the canvas is linked to “${bp.label}”`,
+          );
+        }
+        commitBlueprint(target.id, bp.label, blueprintId);
+        return undefined;
+      },
+      deleteBlueprint(blueprintId, opts) {
+        const bp = loadBlueprints()[blueprintId];
+        if (!bp) return setNote(`no blueprint “${blueprintId}”`);
+        if (bp.builtin) return setNote(`“${bp.label}” ships with the editor and cannot be deleted`);
+        const go = () => {
+          if (!deleteStoredBlueprint(blueprintId)) return setNote(`could not delete “${bp.label}”`);
+          setBlueprints(loadBlueprints());
+          setNote(`deleted blueprint “${bp.label}”`);
+          return undefined;
+        };
+        if (opts?.confirm === false) return go();
+        const dlg = blueprintDialogs();
+        if (!dlg) return setNote("the blueprint dialog is not mounted");
+        void dlg.confirmDelete(bp).then((ok) => ok && go());
+        return undefined;
+      },
+      setNoteText(nodeId, text) {
+        withCurrent((ns, es) => {
+          settle(ns.map((n) => (n.id === nodeId && n.data.kind === "note" ? ({ ...n, data: { ...n.data, text } } as RFNode) : n)), es, { reparent: false });
+        });
+      },
       togglePin(nodeId) {
         withCurrent((ns, es) => {
           settle(
@@ -1044,7 +1208,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
       toggleCollapse(containerId) {
         withCurrent((ns, es) => {
           const next = ns.map((n) => {
-            if (n.id !== containerId || n.type !== SUBGRAPH_TYPE) return n;
+            // Any Beat collapses: a subgraph to its rails, a plain group to its proxies.
+            if (n.id !== containerId || !isContainer(n)) return n;
             const d = rails(n);
             const collapsing = !d.collapsed;
             // The expanded box and the collapsed card are two different sizes. React Flow's
@@ -1070,41 +1235,33 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         });
       },
       saveBlueprint(containerId, presetName) {
-        const all = nodesRef.current as RFNode[];
-        const target = all.find((n) => n.id === containerId);
+        const target = (nodesRef.current as RFNode[]).find((n) => n.id === containerId);
         if (!target || !isContainer(target)) return;
-        const name = (presetName ?? window.prompt("Blueprint name", target.data.label) ?? "").trim();
-        if (!name) return;
-        // Store the LOGICAL wiring: rails are derived, so a saved subgraph is dissolved first
-        // and re-promoted on placement through the same algebra that built it.
-        const wasSubgraph = target.type === SUBGRAPH_TYPE;
-        const logical = wasSubgraph
-          ? dissolveSubgraph(containerId, asCore(all), asCoreEdges(edgesRef.current))
-          : { nodes: asCore(all), edges: asCoreEdges(edgesRef.current) };
-        const existing = loadBlueprints();
-        const linked = rails(target).blueprintId && existing[rails(target).blueprintId!] ? rails(target).blueprintId! : undefined;
-        const id = linked ?? blueprintIdFromName(name, existing);
-        const bp: Blueprint = { id, label: name, savedAt: Date.now(), ...serializeSubtree(containerId, logical.nodes, logical.edges, wasSubgraph) };
-        const next = { ...existing, [id]: bp };
-        writeBlueprints(next);
-        setBlueprints(next);
-        withCurrent(
-          (ns, es) =>
-            settle(
-              ns.map((n) =>
-                n.id === containerId
-                  ? ({ ...n, data: { ...n.data, blueprintId: id, blueprintVersion: (rails(n).blueprintVersion ?? 0) + 1 } } as RFNode)
-                  : n,
-              ),
-              es,
-              { reparent: false },
-            ),
-          { history: false },
-        );
-        setNote(linked ? `updated blueprint “${name}”` : `saved blueprint “${name}”`);
+        const bid = rails(target).blueprintId;
+        const prior = bid ? loadBlueprints()[bid] : undefined;
+        // Linked to a blueprint that still exists and is the user's: a save may UPDATE it. A
+        // built-in it was placed from is not updatable, so that link only informs the dialog.
+        const linked = prior && !prior.builtin ? prior : undefined;
+        if (presetName !== undefined) {
+          // The agent's path: a name, no dialog. Re-saves the linked blueprint when there is one.
+          const name = presetName.trim();
+          if (name) commitBlueprint(containerId, name, linked?.id);
+          return;
+        }
+        const dlg = blueprintDialogs();
+        if (!dlg) return setNote("the blueprint dialog is not mounted");
+        void dlg
+          .save({
+            defaultName: linked?.label ?? target.data.label,
+            ...(prior ? { linked: { id: prior.id, label: prior.label, version: blueprintVersion(prior), builtin: !!prior.builtin } } : {}),
+          })
+          .then((r) => {
+            if (r) commitBlueprint(containerId, r.name, r.mode === "update" && linked ? linked.id : undefined);
+          });
+        return undefined;
       },
     }),
-    [convert, settle, withCurrent],
+    [commitBlueprint, convert, settle, withCurrent],
   );
 
   const edgeActions: EdgeActions = useMemo(
@@ -1331,7 +1488,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
         case "set_collapsed":
           return run((ns, es) => {
             const target = find(ns, args.id);
-            if (target.type !== SUBGRAPH_TYPE) throw new Error("only a subgraph collapses — promote the Beat first");
+            if (!isContainer(target)) throw new Error(`"${target.id}" is not a Beat — only a Beat collapses`);
             const want = !!args.collapsed;
             if (!!rails(target).collapsed !== want) queueMicrotask(() => actions.toggleCollapse(target.id));
             return { id: target.id, collapsed: want };
@@ -1454,20 +1611,15 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
             return { id: target.id, name: args.name };
           }, { history: false });
         case "list_blueprints":
-          return Object.values(loadBlueprints()).map((b) => ({ id: b.id, label: b.label, nodes: b.nodes.length, savedAt: b.savedAt }));
+          return Object.values(loadBlueprints()).map((b) => ({ id: b.id, label: b.label, nodes: b.nodes.length, savedAt: b.savedAt, version: blueprintVersion(b), builtin: !!b.builtin }));
         case "apply_blueprint": {
           const bp = loadBlueprints()[str(args.blueprint_id, "blueprint_id")];
           if (!bp) throw new Error(`no blueprint "${String(args.blueprint_id)}" — list_blueprints names them`);
           const at = { x: num(args.x, "x"), y: num(args.y, "y") };
           return run((ns, es) => {
-            const inst = instantiateBlueprint(bp, at);
-            const merged = [...ns, ...asRF(inst.nodes)];
-            const mergedEdges = [...es, ...asRFEdges(inst.edges)];
-            if (inst.promote) {
-              const out = promoteToSubgraph(inst.rootId, asCore(merged), asCoreEdges(mergedEdges), directorHost);
-              settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
-            } else settle(merged, mergedEdges, { reparent: false });
-            return { id: inst.rootId, blueprint: bp.id };
+            const out = stampBlueprint(bp, at, asCore(ns), asCoreEdges(es));
+            settle(asRF(out.nodes), asRFEdges(out.edges), { reparent: false });
+            return { id: out.rootId, blueprint: bp.id, version: blueprintVersion(bp) };
           });
         }
         default: {
@@ -1511,6 +1663,26 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
 
   // ── [U0] context for modules, registered panels, displayed graph ──
   const drive = useCallback<DriveFn>((name, args = {}) => (apiRef?.current ? apiRef.current(name, args) : Promise.reject(new Error("editor not ready"))), [apiRef]);
+  // ── [U3] the keyboard: chords run the editor's own callbacks or a drive command, never a third path ──
+  useEditorHotkeys({
+    canvasRef,
+    undo,
+    redo,
+    deleteSelection,
+    groupSelection,
+    closePalette: () => {
+      if (!palette) return false;
+      setPalette(null);
+      return true;
+    },
+    selectedIds: () => (nodesRef.current as RFNode[]).filter((n) => n.selected).map((n) => n.id),
+    allIds: () => (nodesRef.current as RFNode[]).map((n) => n.id),
+    hasSelection: () => nodesRef.current.some((n) => n.selected) || edgesRef.current.some((e) => e.selected),
+    drive,
+    screenToFlowPosition,
+    setNote,
+    openHelp,
+  });
   const ctx = useMemo<DirectorCtx>(
     () => ({
       client,
@@ -1537,6 +1709,8 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
   const dockPanels = panelDefs.filter((p) => p.placement === "dock");
   const activeTab = activePanel !== "canvas" ? tabPanels.find((p) => p.id === activePanel) : undefined;
   const displayedEdges = useDisplayedGraph(nodes as RFNode[], edges);
+  // [U6] React Flow names the DISPLAYED edge in the changes it emits; state holds the canonical one.
+  const onDisplayedEdgesChange = useCallback((changes: EdgeChange[]) => onEdgesChange(canonicalEdgeChanges(changes)), [onEdgesChange]);
   const onSelectionChange = useCallback(({ nodes: sel }: { nodes: Node[] }) => {
     const ids = sel.map((n) => n.id);
     setSelectedIds((cur) => (cur.length === ids.length && cur.every((id, i) => id === ids[i]) ? cur : ids));
@@ -1588,21 +1762,6 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
               <Slot name="toolbar-left" />
               <span className="bd-spacer" />
               <Slot name="toolbar-right" />
-              {status?.reachable ? (
-                <select
-                  className="bd-project"
-                  value={loadedProject ?? ""}
-                  title="Which Calliope project the canvas shows"
-                  onChange={(e) => void loadProject(e.target.value === "" ? null : Number(e.target.value))}
-                >
-                  <option value="">demo project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
               {loadedProject !== null ? (
                 <span className={`bd-sync is-${syncState}`} title="Write-back to Calliope">
                   {syncState === "saving" ? "saving…" : syncState === "saved" ? "saved" : syncState === "error" ? "save failed" : "synced"}
@@ -1639,11 +1798,16 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                 nodes={nodes}
                 edges={displayedEdges}
                 onSelectionChange={onSelectionChange}
-                elevateNodesOnSelect={true /* [U1] false + zIndex convention */}
-                snapToGrid={false /* [U8a] */}
-                snapGrid={[18, 18]}
+                elevateNodesOnSelect={false /* [U1] z-order.ts owns the stack: containers -1, leaves bumped on click/drag/spawn */}
+                onNodeClick={onNodeClick}
+                snapToGrid={useSnapToGrid() /* [U8a] the toolbar's Snap switch. A hook, called unconditionally in a props list that is built on every render. */}
+                snapGrid={[18, 18] /* [U8a] the Background's own gap */}
+                selectionOnDrag={true /* [U8a] left-drag on the pane draws a marquee */}
+                panOnDrag={[1, 2] /* [U8a] middle and right drag pan; right-click alone still opens the palette */}
+                selectionMode={SelectionMode.Partial /* [U8a] brushing a node picks it up */}
+                multiSelectionKeyCode={MULTI_SELECT_KEYS /* [U8a] */}
                 onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
+                onEdgesChange={onDisplayedEdgesChange}
                 onNodeDragStart={onNodeDragStart}
                 onNodeDragStop={onNodeDragStop}
                 onConnect={onConnect}
@@ -1658,7 +1822,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
                   openPalette(ev.clientX, ev.clientY, null);
                 }}
                 onNodesDelete={() => queueMicrotask(() => withCurrent((ns, es) => settle(ns, es, { reparent: false })))}
-                deleteKeyCode={["Delete", "Backspace"]}
+                deleteKeyCode={null /* [U3] Delete is a hotkey → deleteSelection, so undo records the pre-delete graph */}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 fitView
@@ -1666,7 +1830,7 @@ function Editor({ calliopeBaseUrl, apiRef, renderMarkdown }: DirectorAppProps) {
               >
                 <Background gap={18} size={1} color="#2a2a35" />
                 <Controls showInteractive={false} />
-                {/* [U8a] <MiniMap /> */}
+                <DirectorMiniMap /> {/* [U8a] */}
               </ReactFlow>
               <Slot name="canvas-overlay" />
               {activeTab ? (

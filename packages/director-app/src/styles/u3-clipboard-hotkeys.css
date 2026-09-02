@@ -1,0 +1,59 @@
+/* U3 — clipboard, hotkeys, help. Tokens only (--bd-*); scoped so nothing leaks past the pane. */
+
+.bd-toolbar .bd-help-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--bd-r-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bd-dim);
+}
+.bd-toolbar .bd-help-btn:hover { color: var(--bd-text); }
+
+/* The sheet is wider than a confirm box wants to be, and it is the CONTENT that scrolls: let
+   the whole modal scroll instead and the Close button leaves the viewport on a short pane. */
+.bd-modal:has(.bd-help) { width: min(640px, 94%); }
+.bd-modal-body:has(.bd-help) { max-height: min(62vh, 560px); overflow: auto; margin-bottom: 14px; }
+
+.bd-help { display: flex; flex-direction: column; gap: 18px; color: var(--bd-text); }
+.bd-help-section { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.bd-help-head {
+  font-size: var(--bd-fs-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--bd-track-caps);
+  color: var(--bd-dim);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--bd-line);
+}
+.bd-help-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 38%) 1fr;
+  gap: 12px;
+  align-items: baseline;
+  font-size: var(--bd-fs-sm);
+  line-height: 1.5;
+}
+.bd-help-keys { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.bd-help-chord { display: inline-flex; gap: 3px; align-items: center; }
+.bd-help-or { color: var(--bd-faint); font-size: var(--bd-fs-2xs); padding: 0 2px; }
+.bd-kbd {
+  display: inline-block;
+  min-width: 14px;
+  padding: 1px 6px;
+  border-radius: var(--bd-r-sm);
+  border: 1px solid var(--bd-line-2);
+  border-bottom-width: 2px;
+  background: var(--bd-raised);
+  box-shadow: var(--bd-hairline);
+  color: var(--bd-text);
+  font: 500 var(--bd-fs-xs)/1.5 var(--bd-font-mono);
+  text-align: center;
+  white-space: nowrap;
+}
+.bd-help-how { color: var(--bd-text); font-weight: 500; }
+.bd-help-what { color: var(--bd-dim); }
+.bd-help-foot { color: var(--bd-faint); font-size: var(--bd-fs-xs); line-height: 1.5; border-top: 1px solid var(--bd-line-soft); padding-top: 10px; }
